@@ -1,0 +1,18 @@
+<Solution>
+  <Folder Name="/simulators/">
+    <Project Path="IndustrialDataProcessor.Simulator/IndustrialDataProcessor.Simulator.csproj" Id="9e7b5ff7-62e4-425c-a802-76617b988ebd" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="IndustrialDataProcessor.Api/IndustrialDataProcessor.Api.csproj" />
+    <Project Path="IndustrialDataProcessor.Application/IndustrialDataProcessor.Application.csproj" />
+    <Project Path="IndustrialDataProcessor.Domain/IndustrialDataProcessor.Domain.csproj" />
+    <Project Path="IndustrialDataProcessor.Infrastructure.Persistence.SqlSugar/IndustrialDataProcessor.Infrastructure.Persistence.SqlSugar.csproj" Id="255c0dde-bbf7-4394-9f56-0edf8fd2811f" />
+    <Project Path="IndustrialDataProcessor.Infrastructure/IndustrialDataProcessor.Infrastructure.csproj" />
+    <Project Path="IndustrialDataProcessor.Share/IndustrialDataProcessor.Share.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="IndustrialDataProcessor.Api.Tests/IndustrialDataProcessor.Api.Tests.csproj" Id="346a4097-f1d7-4834-a0b9-7392e9afd2e7" />
+    <Project Path="IndustrialDataProcessor.Application.Test/IndustrialDataProcessor.Application.Tests.csproj" Id="60dc1428-0299-47b7-8320-49437b7665a5" />
+    <Project Path="IndustrialDataProcessor.Infrastructure.Tests/IndustrialDataProcessor.Infrastructure.Tests.csproj" Id="eeeee99d-d00d-47b6-bcd0-e67a9ceca72c" />
+  </Folder>
+</Solution>

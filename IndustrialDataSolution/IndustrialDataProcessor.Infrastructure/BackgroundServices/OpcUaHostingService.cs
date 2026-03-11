@@ -21,7 +21,6 @@ public class OpcUaHostingService(
     IServiceProvider serviceProvider, // 解决 DI 生命周期的关键：注入 IServiceProvider
     DataCollectionChannel dataChannel,
     ILogger<OpcUaHostingService> logger,
-    IEquipmentDataProcessor equipmentDataProcessor,
     IConnectionManager connectionManager,
     IEnumerable<IProtocolDriver> drivers,
     PointExpressionConverter pointExpressionConverter) : BackgroundService, IDataPublishServerManager
@@ -32,7 +31,7 @@ public class OpcUaHostingService(
     private CancellationTokenSource? _currentCts;
     // 保护重启操作不能并发执行
     private readonly SemaphoreSlim _restartLock = new(1, 1);
-    private readonly IEquipmentDataProcessor _equipmentDataProcessor = equipmentDataProcessor;
+    private readonly ILogger<OpcUaHostingService> _logger = logger;
 
     // 连接管理器
     private readonly IConnectionManager _connectionManager = connectionManager; // 连接管理器
@@ -65,12 +64,12 @@ public class OpcUaHostingService(
         await _restartLock.WaitAsync(_appStoppingToken);
         try
         {
-            logger.LogInformation("准备启动/重启 OPC UA 服务器...");
+            _logger.LogInformation("准备启动/重启 OPC UA 服务器...");
 
             // 1. 如果之前有服务器在跑，发信号取消并停止它
             if (_currentCts != null && !_currentCts.IsCancellationRequested)
             {
-                logger.LogInformation("正在停止旧的 OPC UA 服务器实例...");
+                _logger.LogInformation("正在停止旧的 OPC UA 服务器实例...");
                 await _currentCts.CancelAsync();
 
                 if (_opcServer != null)
@@ -90,7 +89,7 @@ public class OpcUaHostingService(
             // 3. 将服务器核心逻辑丢到后台执行（类似于任务管理器）
             _ = RunServerLoopAsync(_currentCts.Token);
 
-            logger.LogInformation("OPC UA 服务器重启任务已在后台下发完毕。");
+            _logger.LogInformation("OPC UA 服务器重启任务已在后台下发完毕。");
         }
         finally
         {
@@ -108,7 +107,8 @@ public class OpcUaHostingService(
             using (var scope = serviceProvider.CreateScope())
             {
                 var repository = scope.ServiceProvider.GetRequiredService<IWorkstationConfigRepository>();
-                workstationConfig = await repository.GetLatestParsedConfigAsync(loopToken);
+                using (_logger.BeginScope("Caller: {CallerService}", nameof(OpcUaHostingService)))
+                    workstationConfig = await repository.GetLatestParsedConfigAsync(loopToken);
             }
 
             if (workstationConfig == null) return;
@@ -130,7 +130,7 @@ public class OpcUaHostingService(
             // 注意: 使用 app.StartAsync 启动服务
             await app.StartAsync(_opcServer);
 
-            logger.LogInformation("最新的 OPC UA 服务器已挂载并开始运行监听...");
+            _logger.LogInformation("最新的 OPC UA 服务器已挂载并开始运行监听...");
 
             // 3. 挂载 OPC 客户端写入事件
             _opcServer.CustomNodeManager.OnOpcClientWriteRequestedAsync += async (protocol, eq, point, value) =>
@@ -169,17 +169,17 @@ public class OpcUaHostingService(
                 }
                 catch (Exception ex)
                 {
-                    logger.LogError(ex, "更新 OPC UA 节点失败");
+                    _logger.LogError(ex, "更新 OPC UA 节点失败");
                 }
             }
         }
         catch (OperationCanceledException)
         {
-            logger.LogInformation("OPC UA 服务器当前运作循环已被取消/终止。");
+            _logger.LogInformation("OPC UA 服务器当前运作循环已被取消/终止。");
         }
         catch (Exception ex)
         {
-            logger.LogCritical(ex, "OPC UA 服务器在运行过程中发生致命错误！");
+            _logger.LogCritical(ex, "OPC UA 服务器在运行过程中发生致命错误！");
         }
     }
 

@@ -22,7 +22,9 @@ public class DataCollectionAppService(IWorkstationConfigRepository repository, I
     public async Task StartAllProtocolCollectionTasksAsync(CancellationToken token)
     {
         // 1. 获取最新配置
-        var workstation = await _repository.GetLatestParsedConfigAsync(token);
+        WorkstationConfig? workstation;
+        using (_logger.BeginScope("Caller: {CallerService}", nameof(DataCollectionAppService)))
+            workstation = await _repository.GetLatestParsedConfigAsync(token);
 
         if (workstation == null || workstation.Protocols == null || workstation.Protocols.Count == 0)
         {

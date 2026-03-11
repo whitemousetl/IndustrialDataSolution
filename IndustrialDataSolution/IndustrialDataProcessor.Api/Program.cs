@@ -11,16 +11,13 @@ public class Program
     {
         var builder = WebApplication.CreateBuilder(args);
 
-        // 注册内存缓存
-        builder.Services.AddMemoryCache();
-
-        // 注册基础设施层（包含持久化、仓储、后台服务等）
+        // 注册基础设施层（包含持久化、仓储、基础设施后台服务等）
         builder.Services.AddInfrastructure(builder.Configuration);
         
         // 注册应用层服务
         builder.Services.AddApplication();
 
-        // 注册后台托管服务
+        // 注册组合根层的后台服务（启动/编排类服务）
         builder.Services.AddHostedService<DataCollectionHostedService>();
 
         // 注册健康检查和控制器

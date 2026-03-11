@@ -6,9 +6,7 @@
     <Project Path="IndustrialDataProcessor.Api/IndustrialDataProcessor.Api.csproj" />
     <Project Path="IndustrialDataProcessor.Application/IndustrialDataProcessor.Application.csproj" />
     <Project Path="IndustrialDataProcessor.Domain/IndustrialDataProcessor.Domain.csproj" />
-    <Project Path="IndustrialDataProcessor.Infrastructure.Persistence.SqlSugar/IndustrialDataProcessor.Infrastructure.Persistence.SqlSugar.csproj" Id="255c0dde-bbf7-4394-9f56-0edf8fd2811f" />
     <Project Path="IndustrialDataProcessor.Infrastructure/IndustrialDataProcessor.Infrastructure.csproj" />
-    <Project Path="IndustrialDataProcessor.Share/IndustrialDataProcessor.Share.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="IndustrialDataProcessor.Api.Tests/IndustrialDataProcessor.Api.Tests.csproj" Id="346a4097-f1d7-4834-a0b9-7392e9afd2e7" />

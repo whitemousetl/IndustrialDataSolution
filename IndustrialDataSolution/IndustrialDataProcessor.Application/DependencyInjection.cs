@@ -1,6 +1,5 @@
 ﻿using FluentValidation;
 using IndustrialDataProcessor.Application.Behaviors;
-using IndustrialDataProcessor.Application.Features;
 using IndustrialDataProcessor.Application.Services;
 using IndustrialDataProcessor.Application.Validators;
 using IndustrialDataProcessor.Domain.Workstation.Results;

@@ -13,7 +13,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\IndustrialDataProcessor.Application\IndustrialDataProcessor.Application.csproj" />
-    <ProjectReference Include="..\IndustrialDataProcessor.Infrastructure.Persistence.SqlSugar\IndustrialDataProcessor.Infrastructure.Persistence.SqlSugar.csproj" />
     <ProjectReference Include="..\IndustrialDataProcessor.Infrastructure\IndustrialDataProcessor.Infrastructure.csproj" />
   </ItemGroup>
 

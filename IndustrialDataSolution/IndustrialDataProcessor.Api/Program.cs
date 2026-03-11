@@ -2,7 +2,7 @@ using IndustrialDataProcessor.Api.BackgroundServices;
 using IndustrialDataProcessor.Api.Middleware;
 using IndustrialDataProcessor.Application;
 using IndustrialDataProcessor.Infrastructure;
-using IndustrialDataProcessor.Infrastructure.Persistence.SqlSugar;
+
 namespace IndustrialDataProcessor.Api;
 
 public class Program
@@ -11,19 +11,19 @@ public class Program
     {
         var builder = WebApplication.CreateBuilder(args);
 
-        // 注册内存缓存 (如果还没注册的话)
+        // 注册内存缓存
         builder.Services.AddMemoryCache();
 
-        // Add services to the container.
-        // 注册应用层和基础设施层
+        // 注册基础设施层（包含持久化、仓储、后台服务等）
         builder.Services.AddInfrastructure(builder.Configuration);
+        
+        // 注册应用层服务
         builder.Services.AddApplication();
-        // 注册持久化存储层
-        builder.Services.AddPostgreSqlPersistence(builder.Configuration);
 
-        // 在注册应用层和基础设施层注册后台托管服务！
+        // 注册后台托管服务
         builder.Services.AddHostedService<DataCollectionHostedService>();
 
+        // 注册健康检查和控制器
         builder.Services.AddHealthChecks();
         builder.Services.AddControllers();
         builder.Services.AddEndpointsApiExplorer();
@@ -35,13 +35,11 @@ public class Program
 
         var app = builder.Build();
 
-        // 1. 请求日志（最先）
+        // 配置中间件管道
         app.UseMiddleware<RequestLoggingMiddleware>();
-        // 2. 异常处理
         app.UseExceptionHandler();
 
-
-        // Configure the HTTP request pipeline.
+        // 配置 HTTP 请求管道
         app.UseSwagger();
         app.UseSwaggerUI();
         app.MapHealthChecks("/health");

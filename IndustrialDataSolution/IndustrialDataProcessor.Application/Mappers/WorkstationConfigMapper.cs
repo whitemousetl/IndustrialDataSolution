@@ -5,19 +5,29 @@ using IndustrialDataProcessor.Domain.Workstation.Configs.ProtocolSub;
 
 namespace IndustrialDataProcessor.Application.Mappers;
 
+/// <summary>
+/// 工作站配置映射器
+/// </summary>
 public static class WorkstationConfigMapper
 {
+    /// <summary>
+    /// 将 DTO 转换为领域对象
+    /// </summary>
     public static WorkstationConfig ToDomain(this WorkstationConfigDto dto)
     {
-        return new WorkstationConfig
+        var config = new WorkstationConfig(dto.Id, dto.Name ?? string.Empty, dto.IpAddress);
+        
+        foreach (var protocolDto in dto.Protocols)
         {
-            Id = dto.Id,
-            Name = dto.Name ?? string.Empty,
-            IpAddress = dto.IpAddress,
-            Protocols = dto.Protocols.Select(p => p.ToDomain()).ToList()
-        };
+            config.AddProtocol(protocolDto.ToDomain());
+        }
+        
+        return config;
     }
 
+    /// <summary>
+    /// 将协议 DTO 转换为领域对象
+    /// </summary>
     public static ProtocolConfig ToDomain(this ProtocolConfigDto dto)
     {
         ProtocolConfig protocol = dto.InterfaceType switch
@@ -69,24 +79,31 @@ public static class WorkstationConfigMapper
         return protocol;
     }
 
+    /// <summary>
+    /// 将设备 DTO 转换为领域对象
+    /// </summary>
     public static EquipmentConfig ToDomain(this EquipmentConfigDto dto)
     {
-        return new EquipmentConfig
+        var equipment = new EquipmentConfig(dto.Id, dto.IsCollect, dto.Name, dto.EquipmentType);
+        
+        if (dto.Parameters != null)
         {
-            Id = dto.Id,
-            Name = dto.Name,
-            IsCollect = dto.IsCollect,
-            EquipmentType = dto.EquipmentType,
-            Parameters = dto.Parameters?.Select(p => p.ToDomain()).ToList()
-        };
+            foreach (var paramDto in dto.Parameters)
+            {
+                equipment.AddParameter(paramDto.ToDomain());
+            }
+        }
+        
+        return equipment;
     }
 
+    /// <summary>
+    /// 将参数 DTO 转换为领域对象
+    /// </summary>
     public static ParameterConfig ToDomain(this ParameterConfigDto dto)
     {
-        return new ParameterConfig
+        return new ParameterConfig(dto.Label, dto.Address)
         {
-            Label = dto.Label,
-            Address = dto.Address,
             IsMonitor = dto.IsMonitor,
             StationNo = dto.StationNo,
             DataType = dto.DataType,

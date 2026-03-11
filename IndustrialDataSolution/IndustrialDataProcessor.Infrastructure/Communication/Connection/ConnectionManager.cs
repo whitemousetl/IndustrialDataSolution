@@ -8,6 +8,7 @@ using IndustrialDataProcessor.Domain.Communication.IConnection;
 using IndustrialDataProcessor.Domain.Enums;
 using IndustrialDataProcessor.Domain.Workstation.Configs;
 using IndustrialDataProcessor.Domain.Workstation.Configs.ProtocolSub;
+using IndustrialDataProcessor.Infrastructure.Communication.Drivers.TcpSpecial;
 using lib60870.CS101;
 using lib60870.CS104;
 using Opc.Ua;

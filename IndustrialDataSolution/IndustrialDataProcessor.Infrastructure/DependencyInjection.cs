@@ -4,55 +4,133 @@ using IndustrialDataProcessor.Domain.Repositories;
 using IndustrialDataProcessor.Infrastructure.BackgroundServices;
 using IndustrialDataProcessor.Infrastructure.Communication.Connection;
 using IndustrialDataProcessor.Infrastructure.EquipmentCollectionDataProcessing;
+using IndustrialDataProcessor.Infrastructure.Persistence.Repositories;
 using IndustrialDataProcessor.Infrastructure.Repositories;
 using IndustrialDataProcessor.Infrastructure.Serialization.Converters;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using SqlSugar;
 using System.Text.Json;
 
 namespace IndustrialDataProcessor.Infrastructure;
 
 public static class DependencyInjection
 {
+    /// <summary>
+    /// 注册基础设施层服务
+    /// </summary>
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
-        // 1. 读取配置并进行 HslCommunication 授权验证
+        // 1. 配置 SqlSugar 数据库客户端
+        ConfigureSqlSugar(services, configuration);
+
+        // 2. 读取配置并进行 HslCommunication 授权验证
+        ConfigureHslCommunication(configuration);
+
+        // 3. 注册仓储服务
+        RegisterRepositories(services);
+
+        // 4. 注册连接管理器
+        services.AddSingleton<IConnectionManager, ConnectionManager>();
+
+        // 5. 注册后台服务
+        RegisterBackgroundServices(services);
+
+        // 6. 注册设备数据处理器
+        RegisterDataProcessors(services);
+
+        // 7. 自动注册协议驱动
+        RegisterProtocolDrivers(services);
+
+        // 8. 配置 JSON 序列化选项
+        ConfigureJsonOptions(services);
+
+        return services;
+    }
+
+    /// <summary>
+    /// 配置 SqlSugar 数据库客户端
+    /// </summary>
+    private static void ConfigureSqlSugar(IServiceCollection services, IConfiguration configuration)
+    {
+        var connectionString = configuration.GetConnectionString("DefaultConnection")
+            ?? throw new InvalidOperationException("数据库连接字符串未配置");
+
+        services.AddTransient<ISqlSugarClient>(provider =>
+        {
+            var db = new SqlSugarClient(new ConnectionConfig
+            {
+                ConnectionString = connectionString,
+                DbType = DbType.PostgreSQL,
+                IsAutoCloseConnection = true,
+                MoreSettings = new ConnMoreSettings
+                {
+                    PgSqlIsAutoToLower = false,
+                }
+            });
+
+            return db;
+        });
+    }
+
+    /// <summary>
+    /// 配置 HslCommunication 授权
+    /// </summary>
+    private static void ConfigureHslCommunication(IConfiguration configuration)
+    {
         string? hslAuthCode = configuration["HslCommunication:AuthorizationCode"];
 
-        // 如果未配置验证码，直接抛出异常退出程序
         if (string.IsNullOrWhiteSpace(hslAuthCode))
             throw new InvalidOperationException("启动失败：未在 appsettings.json 中找到有效的 HslCommunication:AuthorizationCode 节点。");
 
-        // 如果验证码存在但授权失败，直接抛出异常退出程序
         if (!Authorization.SetAuthorizationCode(hslAuthCode))
             throw new InvalidOperationException("启动失败：HslCommunication 授权验证未通过，请检查授权码是否正确！");
+    }
 
-        // 注册领域仓储 (负责 JSON 解析)
+    /// <summary>
+    /// 注册仓储服务
+    /// </summary>
+    private static void RegisterRepositories(IServiceCollection services)
+    {
+        // 领域仓储（负责 JSON 解析）
         services.AddScoped<IWorkstationConfigRepository, WorkstationConfigRepository>();
+        
+        // 实体仓储（负责数据库操作）
+        services.AddScoped<IWorkstationConfigEntityRepository, WorkstationConfigEntityRepository>();
+        
+        // 设备数据存储仓储
+        services.AddSingleton<IEquipmentDataStorageRepository, EquipmentDataStorageRepository>();
+    }
 
-        // 注册 IConnectionManager 的实现（占位/可替换）
-        // 视场景选择生命周期；通常连接管理器可以用 Singleton
-        services.AddSingleton<IConnectionManager, ConnectionManager>();
+    /// <summary>
+    /// 注册后台服务
+    /// </summary>
+    private static void RegisterBackgroundServices(IServiceCollection services)
+    {
+        // 设备数据后台主机服务
+        services.AddHostedService<EquipmentDataHostingService>();
 
-        // 注册后台服务设备数据后台主机服务
-        services.AddHostedService<EquipmentDataHostingService>();    
-
-        // 3. 注册基础设施层的 OPC UA 托管后台服务
-        // 第一步：先将实体服务注册为单例对象，确保全局唯一
+        // OPC UA 托管后台服务
         services.AddSingleton<OpcUaHostingService>();
-        // 第二步：将领域层的接口映射到这个单例对象（供你的 EventHandler 依赖注入使用）
         services.AddSingleton<IDataPublishServerManager>(sp => sp.GetRequiredService<OpcUaHostingService>());
-        // 第三步：将其提取为后台托管任务（供程序启动时底层 Host 调用 ExecuteAsync）
         services.AddHostedService(sp => sp.GetRequiredService<OpcUaHostingService>());
+    }
 
-        // 注册EquipmentDataProcessor设备数据处理器
+    /// <summary>
+    /// 注册设备数据处理器
+    /// </summary>
+    private static void RegisterDataProcessors(IServiceCollection services)
+    {
         services.AddSingleton<IEquipmentDataProcessor, EquipmentDataProcessor>();
-        // 注册设备数据处理器及其依赖组件
-        // 如果这两个类没有内部状态（纯方法），建议注册为 Singleton 以提高性能
         services.AddSingleton<PointExpressionConverter>();
         services.AddSingleton<VirtualPointCalculator>();
+    }
 
-        // 自动扫描当前程序集(Infrastructure)中所有继承自 IProtocolDriver 的非抽象类，并注册为单例
+    /// <summary>
+    /// 自动注册协议驱动
+    /// </summary>
+    private static void RegisterProtocolDrivers(IServiceCollection services)
+    {
         var driverTypes = typeof(DependencyInjection).Assembly.GetTypes()
             .Where(t => t.IsClass && !t.IsAbstract && typeof(IProtocolDriver).IsAssignableFrom(t));
 
@@ -60,7 +138,13 @@ public static class DependencyInjection
         {
             services.AddSingleton(typeof(IProtocolDriver), type);
         }
+    }
 
+    /// <summary>
+    /// 配置 JSON 序列化选项
+    /// </summary>
+    private static void ConfigureJsonOptions(IServiceCollection services)
+    {
         services.AddSingleton(provider =>
         {
             var options = new JsonSerializerOptions
@@ -70,12 +154,9 @@ public static class DependencyInjection
                 WriteIndented = false
             };
 
-            // 将基础设施层的转换器加进去
             options.Converters.Add(new ProtocolConfigJsonConverter());
 
             return options;
         });
-
-        return services;
     }
 }

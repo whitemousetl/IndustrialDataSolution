@@ -1,18 +1,20 @@
 ﻿namespace IndustrialDataProcessor.Application.Dtos.WorkstationDto;
+
 /// <summary>
-/// 边缘信息
+/// 工作站配置数据传输对象
+/// 用于 API 层与客户端之间的数据传输
 /// </summary>
 public class WorkstationConfigDto
 {
     /// <summary>
-    /// 边缘Id，必须存在
+    /// 工作站Id，必须存在
     /// </summary>
     public string Id { get; set; } = string.Empty;
 
     /// <summary>
-    /// 边缘名称
+    /// 工作站名称
     /// </summary>
-    public string? Name { get; set; } 
+    public string? Name { get; set; }
 
     /// <summary>
     /// IP地址，必须存在

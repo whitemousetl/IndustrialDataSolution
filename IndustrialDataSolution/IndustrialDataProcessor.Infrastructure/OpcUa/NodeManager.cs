@@ -12,8 +12,9 @@ public class NodeManager : CustomNodeManager2
     // <summary>
     private readonly WorkstationConfig _config;
 
-    // 用字典把生成好的“叶子节点”（变量）缓存起来，以便后续快速根据标签/ID找到它们并更新值
-    private readonly Dictionary<string, BaseDataVariableState> _pointNodes = new();
+    // 用字典把生成好的"叶子节点"（变量）缓存起来，以便后续快速根据标签/ID找到它们并更新值
+    // 同时存储节点声明的 DataType，用于类型转换
+    private readonly Dictionary<string, (BaseDataVariableState Node, DataType? DeclaredDataType)> _pointNodes = new();
 
     // 定义一个委托/事件，用于通知外层有客户端要求下发写入操作了
     public event Func<ProtocolConfig, EquipmentConfig, ParameterConfig, object, Task<(bool isSuccess, string errorMsg)>>? OnOpcClientWriteRequestedAsync;
@@ -59,8 +60,9 @@ public class NodeManager : CustomNodeManager2
                     var pointVariable = CreateVariable(equipmentFolder, point.Label, opcDataType, AccessLevels.CurrentReadOrWrite);
 
                     // 6. (关键) 把这个节点按一个唯一键存入字典，例如 "EquipmentId_Label"，以便在更新数据时能瞬间找到它
+                    // 同时存储配置的 DataType，用于后续值更新时的类型转换
                     string cacheKey = $"{equipment.Id}_{point.Label}";
-                    _pointNodes[cacheKey] = pointVariable;
+                    _pointNodes[cacheKey] = (pointVariable, point.DataType);
 
                     //【核心新增】将这个变量的 NodeId 作为键，把协议、设备、点位的配置打包存起来
                     // 注意：这里的 pointVariable.NodeId.Identifier 就是你在 CreateVariable 传的 name (即 point.Label)
@@ -72,7 +74,7 @@ public class NodeManager : CustomNodeManager2
                     // 设置初始值，防止客户端连接时没有拿到值报错
                     object defaultValue = GetDefaultValue(point.DataType);
                     // 【核心修改】这里调用重载方法，将初始状态设为 BadWaitingForInitialData (等待初始数据)
-                    UpdateVariableWithStatus(pointVariable, defaultValue, StatusCodes.BadWaitingForInitialData);
+                    UpdateVariableWithStatus(pointVariable, defaultValue, point.DataType, StatusCodes.BadWaitingForInitialData);
                 }
             }
         }
@@ -107,19 +109,21 @@ public class NodeManager : CustomNodeManager2
                 {
                     string cacheKey = $"{eqResult.EquipmentId}_{ptResult.Label}";
 
-                    if (_pointNodes.TryGetValue(cacheKey, out var variableNode))
+                    if (_pointNodes.TryGetValue(cacheKey, out var nodeInfo))
                     {
+                        var (variableNode, declaredDataType) = nodeInfo;
+                        
                         if (ptResult.ReadIsSuccess && ptResult.Value != null)
                         {
-                            // 单点读取成功: 直接把原始的 value 丢进去，在底层拦截方法里依靠 DataType 处理
-                            UpdateVariableWithStatus(variableNode, ptResult.Value, StatusCodes.Good);
+                            // 单点读取成功: 将值转换为声明的数据类型后再更新
+                            UpdateVariableWithStatus(variableNode, ptResult.Value, declaredDataType, StatusCodes.Good);
                         }
                             
                         else
                             // 单点读取失败（比如：仅仅是这个设备的这一个寄存器地址配错/无权限了）
                             // 关键：保留节点原来的值（variableNode.Value），仅将状态明确改为 Bad
-                            // 单点读取失败: 只更新状态码，保留旧的值。此时也可传入 DataType 以防万一
-                            UpdateVariableWithStatus(variableNode, variableNode.Value, StatusCodes.Bad);
+                            // 单点读取失败: 只更新状态码，保留旧的值
+                            UpdateVariableWithStatus(variableNode, variableNode.Value, declaredDataType, StatusCodes.Bad);
                     }
                 }
             }
@@ -151,9 +155,9 @@ public class NodeManager : CustomNodeManager2
         foreach (var point in equip.Parameters)
         {
             string cacheKey = $"{equipmentId}_{point.Label}";
-            if (_pointNodes.TryGetValue(cacheKey, out var variableNode))
+            if (_pointNodes.TryGetValue(cacheKey, out var nodeInfo))
                 // 维持旧的值以便画面参考，更新状态码为设备离线状态
-                UpdateVariableWithStatus(variableNode, variableNode.Value, statusCode);
+                UpdateVariableWithStatus(nodeInfo.Node, nodeInfo.Node.Value, nodeInfo.DeclaredDataType, statusCode);
         }
     }
 
@@ -164,13 +168,16 @@ public class NodeManager : CustomNodeManager2
     /// <param name="value">新值 (可能是表达式算完后的 double 等)</param>
     /// <param name="expectedDataType">参数配置中该点位期望的原始数据类型</param>
     /// <param name="statusCode">OPC UA 状态码，如果不传默认是 Good</param>
-    private void UpdateVariableWithStatus(BaseDataVariableState variable, object value, uint statusCode = StatusCodes.Good)
+    private void UpdateVariableWithStatus(BaseDataVariableState variable, object value, DataType? expectedDataType, uint statusCode = StatusCodes.Good)
     {
         // 使用锁确保线程安全
         lock (Lock)
         {
-            // 设置新值
-            variable.Value = value;
+            // 【关键修复】将值转换为声明的数据类型，防止类型不匹配
+            var convertedValue = ConvertToExpectedType(value, expectedDataType);
+            
+            // 设置转换后的值
+            variable.Value = convertedValue;
 
             // 状态码设为 Good，表示数据有效
             variable.StatusCode = statusCode;
@@ -365,8 +372,8 @@ public class NodeManager : CustomNodeManager2
             if (isSuccess)
             {
                 // 4. 写入 PLC 成功了！现在你可以把 OPC UA 内存模型里的值改掉，触发刷新
-                // 【修复】加上 route.Parameter.DataType
-                UpdateVariableWithStatus((BaseDataVariableState)node, value, StatusCodes.Good);
+                // 【修复】加上 route.Parameter.DataType 进行类型转换
+                UpdateVariableWithStatus((BaseDataVariableState)node, value, route.Parameter.DataType, StatusCodes.Good);
                 return ServiceResult.Good;
             }
             else

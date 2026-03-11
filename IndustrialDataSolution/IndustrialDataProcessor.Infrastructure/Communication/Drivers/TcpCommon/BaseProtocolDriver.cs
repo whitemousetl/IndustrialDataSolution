@@ -15,6 +15,7 @@ public abstract class BaseProtocolDriver<TConnection> : IProtocolDriver where TC
 
     protected BaseProtocolDriver()
     {
+
         // 自动从类名中提取协议名称，例如 ModbusTcpDriver -> ModbusTcp
         _protocolName = GetType().Name.EndsWith("Driver")
             ? GetType().Name[..^"Driver".Length]

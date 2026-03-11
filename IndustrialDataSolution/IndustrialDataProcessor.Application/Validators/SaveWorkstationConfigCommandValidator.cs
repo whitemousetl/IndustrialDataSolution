@@ -1,5 +1,5 @@
 ﻿using FluentValidation;
-using IndustrialDataProcessor.Application.Commands;
+using IndustrialDataProcessor.Application.Features;
 
 namespace IndustrialDataProcessor.Application.Validators;
 
@@ -7,6 +7,6 @@ public class SaveWorkstationConfigCommandValidator : AbstractValidator<SaveWorks
 {
 	public SaveWorkstationConfigCommandValidator()
 	{
-		RuleFor(x => x.dto).SetValidator(new WorkstationConfigDtoValidator());
+		RuleFor(x => x.Dto).SetValidator(new WorkstationConfigDtoValidator());
 	}
 }

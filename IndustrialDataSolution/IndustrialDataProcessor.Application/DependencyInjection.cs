@@ -1,6 +1,6 @@
 ﻿using FluentValidation;
 using IndustrialDataProcessor.Application.Behaviors;
-using IndustrialDataProcessor.Application.Commands;
+using IndustrialDataProcessor.Application.Features;
 using IndustrialDataProcessor.Application.Services;
 using IndustrialDataProcessor.Application.Validators;
 using IndustrialDataProcessor.Domain.Workstation.Results;
@@ -15,23 +15,24 @@ public static class DependencyInjection
     /// </summary>
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
-        // 注册应用服务
-        // 未来可以添加更多服务
-        // services.AddScoped<OtherService>();
-         services.AddValidatorsFromAssemblyContaining<WorkstationConfigDtoValidator>();
+        // 注册 FluentValidation 验证器
+        services.AddValidatorsFromAssemblyContaining<WorkstationConfigDtoValidator>();
+        
         // 必须为 AddScoped，因为它的依赖项 Repository 是 Scoped 的
         services.AddScoped<IDataCollectionAppService, DataCollectionAppService>();
         services.AddSingleton<ICollectionTaskManager, CollectionTaskManager>();
+        
         // 【新增】注册数据采集结果的单例通道 (进程内消息总线)
         services.AddSingleton<DataCollectionChannel>();
-        // 注册 MediatR（将扫描包含命令/处理器的程序集中定义的 handler）
-        // 确保项目已引用 MediatR.Extensions.Microsoft.DependencyInjection
-        services.AddMediatR(cfg => cfg.RegisterServicesFromAssemblyContaining<SaveWorkstationConfigCommand>());
+        
+        // 注册 MediatR
+        // 【重要】明确指定只扫描 Application 程序集，避免重复注册
         services.AddMediatR(cfg =>
         {
-            cfg.RegisterServicesFromAssemblyContaining<SaveWorkstationConfigCommand>();
-
-            //加入全局验证拦截器
+            // 只扫描当前程序集，不使用 RegisterServicesFromAssemblyContaining 以避免潜在的重复扫描问题
+            cfg.RegisterServicesFromAssembly(typeof(DependencyInjection).Assembly);
+            
+            // 加入全局验证拦截器
             cfg.AddOpenBehavior(typeof(ValidationBehavior<,>));
         });
 

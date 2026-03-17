@@ -53,12 +53,10 @@ public class WorkstationConfig : IAggregateRoot
     /// </summary>
     public WorkstationConfig(string id, string name, string ipAddress)
     {
-        ValidateId(id);
-        ValidateIpAddress(ipAddress);
 
-        Id = id;
+        Id = id ?? string.Empty;
         Name = name ?? string.Empty;
-        IpAddress = ipAddress;
+        IpAddress = ipAddress ?? string.Empty;
     }
 
     /// <summary>
@@ -99,36 +97,10 @@ public class WorkstationConfig : IAggregateRoot
     }
 
     /// <summary>
-    /// 更新工作站基本信息
-    /// </summary>
-    public void UpdateBasicInfo(string name, string ipAddress)
-    {
-        ValidateIpAddress(ipAddress);
-        Name = name ?? string.Empty;
-        IpAddress = ipAddress;
-    }
-
-    /// <summary>
     /// 获取所有启用的协议
     /// </summary>
     public IEnumerable<ProtocolConfig> GetActiveProtocols()
     {
         return _protocols.Where(p => p.Equipments.Any(e => e.IsCollect));
-    }
-
-    private static void ValidateId(string id)
-    {
-        if (string.IsNullOrWhiteSpace(id))
-        {
-            throw new DomainException("工作站ID不能为空");
-        }
-    }
-
-    private static void ValidateIpAddress(string ipAddress)
-    {
-        if (string.IsNullOrWhiteSpace(ipAddress))
-        {
-            throw new DomainException("IP地址不能为空");
-        }
     }
 }

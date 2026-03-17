@@ -14,7 +14,8 @@ public static class DependencyInjection
     /// </summary>
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
-        // 注册 FluentValidation 验证器
+        // 注册 FluentValidation 验证器，扫描程序集，把所有 AbstractValidator<T> 注册为 IValidator<T>
+        // ① 扫描程序集，把所有 AbstractValidator<T> 注册为 IValidator<T>
         services.AddValidatorsFromAssemblyContaining<WorkstationConfigDtoValidator>();
         
         // 必须为 AddScoped，因为它的依赖项 Repository 是 Scoped 的
@@ -29,9 +30,10 @@ public static class DependencyInjection
         services.AddMediatR(cfg =>
         {
             // 只扫描当前程序集，不使用 RegisterServicesFromAssemblyContaining 以避免潜在的重复扫描问题
+            // ② 把 ValidationBehavior 注册为 MediatR 管道拦截器
             cfg.RegisterServicesFromAssembly(typeof(DependencyInjection).Assembly);
-            
-            // 加入全局验证拦截器
+
+            // 加入全局验证拦截器，把 ValidationBehavior 注册为 MediatR 管道拦截器
             cfg.AddOpenBehavior(typeof(ValidationBehavior<,>));
         });
 

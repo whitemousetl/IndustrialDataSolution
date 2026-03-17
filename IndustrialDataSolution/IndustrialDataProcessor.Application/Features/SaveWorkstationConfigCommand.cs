@@ -17,11 +17,11 @@ public record SaveWorkstationConfigCommand(WorkstationConfigDto Dto) : IRequest;
 /// 保存工作站配置命令处理器
 /// </summary>
 public class SaveWorkstationConfigCommandHandler(
-    IWorkstationConfigEntityRepository repository, 
+    IWorkstationConfigPersistenceRepository repository, 
     IMediator mediator, 
     JsonSerializerOptions jsonOptions) : IRequestHandler<SaveWorkstationConfigCommand>
 {
-    private readonly IWorkstationConfigEntityRepository _repository = repository;
+    private readonly IWorkstationConfigPersistenceRepository _repository = repository;
     private readonly IMediator _mediator = mediator;
     private readonly JsonSerializerOptions _options = jsonOptions;
 

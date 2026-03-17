@@ -33,29 +33,17 @@ public class WorkstationConfigController(IMediator mediator, ILogger<Workstation
     [ProducesResponseType(typeof(ApiResponse), StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<ApiResponse>> SaveConfig([FromBody] WorkstationConfigDto dto, CancellationToken token = default)
     {
-        try
-        {
-            var command = new SaveWorkstationConfigCommand(dto);
-            
-            // 同步等待数据库写入完成（包含验证、转换、存储）
-            // 事件发布后，EventHandler 中的耗时操作会在后台异步执行
-            await _mediator.Send(command, token);
-            
-            _logger.LogInformation("工作站配置保存成功，后台服务重启任务已触发。WorkstationId: {Id}", dto.Id);
-            
-            return Ok(ApiResponse.Ok("配置保存成功，服务正在后台更新"));
-        }
-        catch (FluentValidation.ValidationException ex)
-        {
-            // 验证失败
-            var errors = string.Join("; ", ex.Errors.Select(e => e.ErrorMessage));
-            _logger.LogWarning("工作站配置验证失败: {Errors}", errors);
-            return BadRequest(ApiResponse.Fail($"配置验证失败: {errors}"));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "保存工作站配置时发生错误");
-            return StatusCode(500, ApiResponse.Error("保存配置失败，请稍后重试"));
-        }
+        var command = new SaveWorkstationConfigCommand(dto);
+
+        // 同步等待数据库写入完成（包含验证、转换、存储）
+        // 事件发布后，EventHandler 中的耗时操作会在后台异步执行
+        // 验证失败 → ValidationBehavior 抛出 ValidationException → GlobalExceptionHandler 处理
+        // 业务异常 → Handler 抛出 DomainException → GlobalExceptionHandler 处理
+        // 基础设施异常 → Repository 抛出 InfrastructureException → GlobalExceptionHandler 处理
+        await _mediator.Send(command, token);
+
+        _logger.LogInformation("工作站配置保存成功，后台服务重启任务已触发。WorkstationId: {Id}", dto.Id);
+
+        return Ok(ApiResponse.Ok("配置保存成功，服务正在后台更新"));
     }
 }

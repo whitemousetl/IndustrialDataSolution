@@ -16,13 +16,13 @@ public class WorkstationConfigDtoValidatorTests
         _validator = new WorkstationConfigDtoValidator();
     }
 
-    #region 基础必填字段验证 - Id
+    #region Id, IpAddress, Name 可为空验证
 
-    [Theory(DisplayName = "Id为空/空白/null时应该返回验证异常")]
+    [Theory(DisplayName = "Id为空/空白/null时不应该返回验证异常")]
     [InlineData("")]
     [InlineData(" ")]
     [InlineData(null)]
-    public void Id_WhenEmpty_ShouldHaveValidationError(string? id)
+    public void Id_WhenEmpty_ShouldNotHaveValidationError(string? id)
     {
         // Arrange
         var dto = CreateValidWorkstationDto();
@@ -31,34 +31,15 @@ public class WorkstationConfigDtoValidatorTests
         // Act
         var result = _validator.TestValidate(dto);
 
-        // Assert
-        result.ShouldHaveValidationErrorFor(x => x.Id)
-            .WithErrorMessage("工作站ID不能为空");
+        // Assert - Id 可为空，不应该有验证错误
+        result.ShouldNotHaveValidationErrorFor(x => x.Id);
     }
 
-    [Fact(DisplayName = "Id有效时没有验证异常")]
-    public void Id_WhenValid_ShouldNotHaveValidationError()
-    {
-        // Arrange
-        var dto = CreateValidWorkstationDto();
-        dto.Id = "Workstation001";
-
-        // Act
-        var result = _validator.TestValidate(dto);
-
-        // Assert
-        result.ShouldNotHaveAnyValidationErrors();
-    }
-
-    #endregion
-
-    #region IP地址验证 - NotEmpty
-
-    [Theory(DisplayName = "IpAddress为空/空白/null时应该返回验证异常")]
+    [Theory(DisplayName = "IpAddress为空/空白/null时不应该返回验证异常")]
     [InlineData("")]
     [InlineData(" ")]
     [InlineData(null)]
-    public void IpAddress_WhenEmpty_ShouldHaveValidationError(string? ipAddress)
+    public void IpAddress_WhenEmpty_ShouldNotHaveValidationError(string? ipAddress)
     {
         // Arrange
         var dto = CreateValidWorkstationDto();
@@ -67,77 +48,27 @@ public class WorkstationConfigDtoValidatorTests
         // Act
         var result = _validator.TestValidate(dto);
 
-        // Assert
-        result.ShouldHaveValidationErrorFor(x => x.IpAddress)
-            .WithErrorMessage("工作站IP地址不能为空");
+        // Assert - IpAddress 可为空，不应该有验证错误
+        result.ShouldNotHaveValidationErrorFor(x => x.IpAddress);
+    }
+
+    [Fact(DisplayName = "Name为空时不应该返回验证异常")]
+    public void Name_WhenEmpty_ShouldNotHaveValidationError()
+    {
+        // Arrange
+        var dto = CreateValidWorkstationDto();
+        dto.Name = null;
+
+        // Act
+        var result = _validator.TestValidate(dto);
+
+        // Assert - Name 可为空，不应该有验证错误
+        result.ShouldNotHaveValidationErrorFor(x => x.Name);
     }
 
     #endregion
 
-    #region IP地址验证 - 格式验证
-
-    [Theory(DisplayName = "IpAddress格式不正确时应该返回校验异常")]
-    [InlineData("192.168.1.1.1")]
-    [InlineData("abc.def.ghi.jkl")]
-    [InlineData("999.999.999.999")]
-    [InlineData("192.168.1.256")]
-    [InlineData("256.1.1.1")]
-    [InlineData("192.168.-1.1")]
-    public void IpAddress_WhenInvalidFormat_ShouldHaveValidationError(string ipAddress)
-    {
-        // Arrange
-        var dto = CreateValidWorkstationDto();
-        dto.IpAddress = ipAddress;
-
-        // Act
-        var result = _validator.TestValidate(dto);
-
-        // Assert
-        result.ShouldHaveValidationErrorFor(x => x.IpAddress)
-            .WithErrorMessage("IP地址格式不正确");
-    }
-
-    [Theory(DisplayName = "IpAddress格式正确时没有验证异常")]
-    [InlineData("192.168.1.1")]
-    [InlineData("10.0.0.1")]
-    [InlineData("127.0.0.1")]
-    [InlineData("192.168.1")]
-    [InlineData("0.0.0.0")]
-    [InlineData("255.255.255.255")]
-    public void IpAddress_WhenValidFormat_ShouldNotHaveValidationError(string ipAddress)
-    {
-        // Arrange
-        var dto = CreateValidWorkstationDto();
-        dto.IpAddress = ipAddress;
-
-        // Act
-        var result = _validator.TestValidate(dto);
-
-        // Assert
-        result.ShouldNotHaveAnyValidationErrors();
-    }
-
-    [Theory(DisplayName = "IPv6地址应该返回校验异常(仅支持IPv4)")]
-    [InlineData("2001:0db8:85a3:0000:0000:8a2e:0370:7334")]
-    [InlineData("::1")]
-    [InlineData("fe80::1")]
-    public void IpAddress_WhenIPv6_ShouldHaveValidationError(string ipAddress)
-    {
-        // Arrange
-        var dto = CreateValidWorkstationDto();
-        dto.IpAddress = ipAddress;
-
-        // Act
-        var result = _validator.TestValidate(dto);
-
-        // Assert
-        result.ShouldHaveValidationErrorFor(x => x.IpAddress)
-            .WithErrorMessage("IP地址格式不正确");
-    }
-
-    #endregion
-
-    #region 协议列表验证 - NotEmpty
+    #region 协议列表验证 - NotNull 和 NotEmpty
 
     [Fact(DisplayName = "Protocols为null时应该返回校验异常")]
     public void Protocols_WhenNull_ShouldHaveValidationError()
@@ -151,7 +82,7 @@ public class WorkstationConfigDtoValidatorTests
 
         // Assert
         result.ShouldHaveValidationErrorFor(x => x.Protocols)
-            .WithErrorMessage("协议列表不能为空");
+            .WithErrorMessage("协议列表不能为null");
     }
 
     [Fact(DisplayName = "Protocols为空集合时应该返回校验异常")]
@@ -166,7 +97,7 @@ public class WorkstationConfigDtoValidatorTests
 
         // Assert
         result.ShouldHaveValidationErrorFor(x => x.Protocols)
-            .WithErrorMessage("协议列表不能为空");
+            .WithErrorMessage("协议列表不能为空，至少需要一个协议配置");
     }
 
     [Fact(DisplayName = "Protocols包含有效协议时没有验证异常")]
@@ -187,16 +118,16 @@ public class WorkstationConfigDtoValidatorTests
     #region 协议列表子项验证
 
     [Fact(DisplayName = "Protocols包含无效的协议Id时应该返回校验异常")]
-    public void Protocols_WhenContainsInvalidId_ShouldHaveValidationError()
+    public void Protocols_WhenContainsNullId_ShouldHaveValidationError()
     {
         // Arrange
         var dto = CreateValidWorkstationDto();
-        dto.Protocols[0].Id = string.Empty;
+        dto.Protocols[0].Id = null!;
 
         // Act
         var result = _validator.TestValidate(dto);
 
-        // Assert
+        // Assert - 协议Id不能为null
         result.ShouldHaveValidationErrorFor("Protocols[0].Id");
     }
 
@@ -301,23 +232,23 @@ public class WorkstationConfigDtoValidatorTests
         result.ShouldNotHaveAnyValidationErrors();
     }
 
-    [Fact(DisplayName = "多个字段同时无效时应该返回所有验证异常")]
-    public void WorkstationConfigDto_WhenMultipleFieldsInvalid_ShouldReturnAllErrors()
+    [Fact(DisplayName = "协议列表为null时应该返回验证异常")]
+    public void WorkstationConfigDto_WhenProtocolsNull_ShouldReturnError()
     {
         // Arrange
         var dto = new TestWorkstationConfigDto
         {
-            Id = string.Empty,              // 无效：Id 为空
-            IpAddress = "invalid_ip",       // 无效：IP 格式错误
-            Protocols = null!               // 无效：协议列表为 null
+            Id = string.Empty,              // 有效：Id 可为空
+            IpAddress = "invalid_ip",       // 有效：IpAddress 可为空
+            Protocols = null!               // 无效：协议列表不能为 null
         };
 
         // Act
         var result = _validator.TestValidate(dto);
 
         // Assert
-        result.ShouldHaveValidationErrorFor(x => x.Id);
-        result.ShouldHaveValidationErrorFor(x => x.IpAddress);
+        result.ShouldNotHaveValidationErrorFor(x => x.Id);
+        result.ShouldNotHaveValidationErrorFor(x => x.IpAddress);
         result.ShouldHaveValidationErrorFor(x => x.Protocols);
     }
 
@@ -352,6 +283,21 @@ public class WorkstationConfigDtoValidatorTests
         protocol2.Equipments[0].Parameters!.Add(CreateValidParameter("Pressure", "400002"));
 
         dto.Protocols.Add(protocol2);
+
+        // Act
+        var result = _validator.TestValidate(dto);
+
+        // Assert
+        result.ShouldNotHaveAnyValidationErrors();
+    }
+
+    [Fact(DisplayName = "Id和IpAddress为空但Protocols有效时应该通过验证")]
+    public void WorkstationConfigDto_WhenIdAndIpAddressEmptyButProtocolsValid_ShouldPass()
+    {
+        // Arrange
+        var dto = CreateValidWorkstationDto();
+        dto.Id = string.Empty;
+        dto.IpAddress = string.Empty;
 
         // Act
         var result = _validator.TestValidate(dto);

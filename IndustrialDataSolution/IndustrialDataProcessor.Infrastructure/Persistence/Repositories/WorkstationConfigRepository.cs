@@ -1,29 +1,19 @@
 ﻿using IndustrialDataProcessor.Domain.Repositories;
 using IndustrialDataProcessor.Domain.Workstation.Configs;
-using IndustrialDataProcessor.Infrastructure.Serialization.Converters;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
 
-namespace IndustrialDataProcessor.Infrastructure.Repositories;
+namespace IndustrialDataProcessor.Infrastructure.Persistence.Repositories;
 
-public class WorkstationConfigRepository : IWorkstationConfigRepository
+/// <summary>
+/// 工作站配置领域仓储实现
+/// <para>负责从数据库获取配置实体并解析为领域模型</para>
+/// </summary>
+public class WorkstationConfigRepository(IWorkstationConfigPersistenceRepository repository, ILogger<WorkstationConfigRepository> logger, JsonSerializerOptions jsonOptions) : IWorkstationConfigRepository
 {
-    private readonly IWorkstationConfigEntityRepository _repository;
-    private readonly ILogger<WorkstationConfigRepository> _logger;
-    private readonly JsonSerializerOptions _jsonOptions;
-
-    public WorkstationConfigRepository(
-        IWorkstationConfigEntityRepository repository,
-        ILogger<WorkstationConfigRepository> logger)
-    {
-        _repository = repository;
-        _logger = logger;
-        _jsonOptions = new JsonSerializerOptions
-        {
-            PropertyNameCaseInsensitive = true, // 忽略大小写
-            Converters = { new ProtocolConfigJsonConverter() } // 注册多态转换器
-        };
-    }
+    private readonly IWorkstationConfigPersistenceRepository _repository = repository;
+    private readonly ILogger<WorkstationConfigRepository> _logger = logger;
+    private readonly JsonSerializerOptions _jsonOptions = jsonOptions;
 
     public async Task<WorkstationConfig?> GetLatestParsedConfigAsync(CancellationToken token)
     {
@@ -42,25 +32,25 @@ public class WorkstationConfigRepository : IWorkstationConfigRepository
             return null;
         }
 
-        _logger.LogDebug("开始反序列化工作站配置, JsonContent长度: {Length}, 前100字符: {Preview}", 
-            entity.JsonContent.Length, 
+        _logger.LogDebug("开始反序列化工作站配置, JsonContent长度: {Length}, 前100字符: {Preview}",
+            entity.JsonContent.Length,
             entity.JsonContent.Length > 100 ? entity.JsonContent[..100] : entity.JsonContent);
 
         try
         {
             // 2. 在基础设施层完成 JSON 到 领域模型 的转换
             var config = JsonSerializer.Deserialize<WorkstationConfig>(entity.JsonContent, _jsonOptions);
-            
+
             if (config != null)
             {
-                _logger.LogDebug("反序列化成功 - Id: {Id}, IpAddress: {IpAddress}, Protocols数量: {Count}", 
+                _logger.LogDebug("反序列化成功 - Id: {Id}, IpAddress: {IpAddress}, Protocols数量: {Count}",
                     config.Id, config.IpAddress, config.Protocols?.Count ?? 0);
             }
             else
             {
                 _logger.LogWarning("反序列化结果为null");
             }
-            
+
             return config;
         }
         catch (JsonException ex)

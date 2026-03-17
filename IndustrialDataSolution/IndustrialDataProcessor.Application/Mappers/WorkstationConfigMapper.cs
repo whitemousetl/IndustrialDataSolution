@@ -15,7 +15,7 @@ public static class WorkstationConfigMapper
     /// </summary>
     public static WorkstationConfig ToDomain(this WorkstationConfigDto dto)
     {
-        var config = new WorkstationConfig(dto.Id, dto.Name ?? string.Empty, dto.IpAddress);
+        var config = new WorkstationConfig(dto.Id ?? string.Empty, dto.Name ?? string.Empty, dto.IpAddress ?? string.Empty);
         
         foreach (var protocolDto in dto.Protocols)
         {
@@ -70,11 +70,11 @@ public static class WorkstationConfigMapper
         protocol.CommunicationDelay = dto.CommunicationDelay;
         protocol.ReceiveTimeOut = dto.ReceiveTimeOut;
         protocol.ConnectTimeOut = dto.ConnectTimeOut;
-        protocol.Account = dto.Account;
-        protocol.Password = dto.Password;
-        protocol.Remark = dto.Remark;
-        protocol.AdditionalOptions = dto.AdditionalOptions;
-        protocol.Equipments = dto.Equipments.Select(e => e.ToDomain()).ToList();
+        protocol.Account = dto.Account ?? string.Empty;
+        protocol.Password = dto.Password ?? string.Empty;
+        protocol.Remark = dto.Remark ?? string.Empty;
+        protocol.AdditionalOptions = dto.AdditionalOptions ?? string.Empty;
+        protocol.Equipments = [.. dto.Equipments.Select(e => e.ToDomain())];
 
         return protocol;
     }

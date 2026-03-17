@@ -79,7 +79,7 @@ public class ProtocolConfigDtoValidatorTests
 
         // Assert
         result.ShouldHaveValidationErrorFor(x => x.Equipments)
-            .WithErrorMessage($"协议Id: {dto.Id} 协议类型: {dto.ProtocolType} 设备列表不能为空");
+            .WithErrorMessage($"协议Id: {dto.Id} 设备列表不能为null");
     }
 
     [Fact(DisplayName = "Equipments为空集合时应该返回校验异常")]
@@ -94,7 +94,7 @@ public class ProtocolConfigDtoValidatorTests
 
         // Assert
         result.ShouldHaveValidationErrorFor(x => x.Equipments)
-            .WithErrorMessage($"协议Id: {dto.Id} 协议类型: {dto.ProtocolType} 设备列表不能为空");
+            .WithErrorMessage($"协议Id: {dto.Id} 设备列表不能为空，至少需要一个设备配置");
     }
 
     #endregion
@@ -399,7 +399,7 @@ public class ProtocolConfigDtoValidatorTests
 
         // Assert
         result.ShouldHaveValidationErrorFor(x => x.DatabaseConnectString)
-            .WithErrorMessage($"协议: {dto.Id} 协议类型: {dto.ProtocolType} 的数据库[连接字符串]或[IP地址/端口/数据库名]至少需要提供一种方式");
+            .WithErrorMessage($"协议Id: {dto.Id} 协议类型: {dto.ProtocolType} 数据库连接字符串不能为空");
     }
 
     [Fact(DisplayName = "DATABASE接口只提供连接字符串时没有验证异常")]
@@ -411,23 +411,6 @@ public class ProtocolConfigDtoValidatorTests
         dto.IpAddress = null;
         dto.ProtocolPort = null;
         dto.DatabaseName = null;
-
-        // Act
-        var result = _validator.TestValidate(dto);
-
-        // Assert
-        result.ShouldNotHaveValidationErrorFor(x => x.DatabaseConnectString);
-    }
-
-    [Fact(DisplayName = "DATABASE接口只提供拆分属性时没有验证异常")]
-    public void DatabaseConnectString_WhenOnlySeparatePropertiesProvided_ShouldNotHaveValidationError()
-    {
-        // Arrange
-        var dto = CreateValidDatabaseProtocolDto();
-        dto.DatabaseConnectString = null;
-        dto.IpAddress = "192.168.1.100";
-        dto.ProtocolPort = 3306;
-        dto.DatabaseName = "TestDB";
 
         // Act
         var result = _validator.TestValidate(dto);
@@ -505,7 +488,7 @@ public class ProtocolConfigDtoValidatorTests
 
         // Assert
         result.ShouldHaveValidationErrorFor(x => x.AccessApiString)
-            .WithErrorMessage($"协议Id: {dto.Id} 协议类型: {dto.ProtocolType} 访问API语句不能为空");
+            .WithErrorMessage($"协议Id: {dto.Id} 协议类型: {dto.ProtocolType} 访问API地址不能为空");
     }
 
     [Fact(DisplayName = "API接口所有必填字段有效时没有验证异常")]
@@ -652,6 +635,167 @@ public class ProtocolConfigDtoValidatorTests
 
     #endregion
 
+    #region COM接口枚举验证
+
+    [Fact(DisplayName = "COM接口BaudRate无效枚举值时应该返回校验异常")]
+    public void BaudRate_WhenComAndInvalidEnum_ShouldHaveValidationError()
+    {
+        // Arrange
+        var dto = CreateValidComProtocolDto();
+        dto.BaudRate = (BaudRateType)999;
+
+        // Act
+        var result = _validator.TestValidate(dto);
+
+        // Assert
+        result.ShouldHaveValidationErrorFor(x => x.BaudRate)
+            .WithErrorMessage($"协议Id: {dto.Id} 协议类型: {dto.ProtocolType} 波特率无效");
+    }
+
+    [Fact(DisplayName = "COM接口DataBits无效枚举值时应该返回校验异常")]
+    public void DataBits_WhenComAndInvalidEnum_ShouldHaveValidationError()
+    {
+        // Arrange
+        var dto = CreateValidComProtocolDto();
+        dto.DataBits = (DataBitsType)999;
+
+        // Act
+        var result = _validator.TestValidate(dto);
+
+        // Assert
+        result.ShouldHaveValidationErrorFor(x => x.DataBits)
+            .WithErrorMessage($"协议Id: {dto.Id} 协议类型: {dto.ProtocolType} 数据位无效");
+    }
+
+    [Fact(DisplayName = "COM接口Parity无效枚举值时应该返回校验异常")]
+    public void Parity_WhenComAndInvalidEnum_ShouldHaveValidationError()
+    {
+        // Arrange
+        var dto = CreateValidComProtocolDto();
+        dto.Parity = (DomainParity)999;
+
+        // Act
+        var result = _validator.TestValidate(dto);
+
+        // Assert
+        result.ShouldHaveValidationErrorFor(x => x.Parity)
+            .WithErrorMessage($"协议Id: {dto.Id} 协议类型: {dto.ProtocolType} 校验位无效");
+    }
+
+    [Fact(DisplayName = "COM接口StopBits无效枚举值时应该返回校验异常")]
+    public void StopBits_WhenComAndInvalidEnum_ShouldHaveValidationError()
+    {
+        // Arrange
+        var dto = CreateValidComProtocolDto();
+        dto.StopBits = (DomainStopBits)999;
+
+        // Act
+        var result = _validator.TestValidate(dto);
+
+        // Assert
+        result.ShouldHaveValidationErrorFor(x => x.StopBits)
+            .WithErrorMessage($"协议Id: {dto.Id} 协议类型: {dto.ProtocolType} 停止位无效");
+    }
+
+    #endregion
+
+    #region API接口枚举验证
+
+    [Fact(DisplayName = "API接口RequestMethod无效枚举值时应该返回校验异常")]
+    public void RequestMethod_WhenApiAndInvalidEnum_ShouldHaveValidationError()
+    {
+        // Arrange
+        var dto = CreateValidApiProtocolDto();
+        dto.RequestMethod = (RequestMethod)999;
+
+        // Act
+        var result = _validator.TestValidate(dto);
+
+        // Assert
+        result.ShouldHaveValidationErrorFor(x => x.RequestMethod)
+            .WithErrorMessage($"协议Id: {dto.Id} 协议类型: {dto.ProtocolType} 请求方式无效");
+    }
+
+    [Theory(DisplayName = "API接口RequestMethod为有效枚举值时没有验证异常")]
+    [InlineData(RequestMethod.Get)]
+    [InlineData(RequestMethod.Post)]
+    [InlineData(RequestMethod.Put)]
+    [InlineData(RequestMethod.Delete)]
+    [InlineData(RequestMethod.Patch)]
+    public void RequestMethod_WhenApiAndValidEnum_ShouldNotHaveValidationError(RequestMethod requestMethod)
+    {
+        // Arrange
+        var dto = CreateValidApiProtocolDto();
+        dto.RequestMethod = requestMethod;
+
+        // Act
+        var result = _validator.TestValidate(dto);
+
+        // Assert
+        result.ShouldNotHaveValidationErrorFor(x => x.RequestMethod);
+    }
+
+    #endregion
+
+    #region 端口边界值测试
+
+    [Theory(DisplayName = "LAN接口ProtocolPort边界值1和65535时没有验证异常")]
+    [InlineData(1)]
+    [InlineData(65535)]
+    public void ProtocolPort_WhenLanAndBoundaryValues_ShouldNotHaveValidationError(int port)
+    {
+        // Arrange
+        var dto = CreateValidLanProtocolDto();
+        dto.ProtocolPort = port;
+
+        // Act
+        var result = _validator.TestValidate(dto);
+
+        // Assert
+        result.ShouldNotHaveValidationErrorFor(x => x.ProtocolPort);
+    }
+
+    [Fact(DisplayName = "LAN接口ProtocolPort为负数时应该返回校验异常")]
+    public void ProtocolPort_WhenLanAndNegative_ShouldHaveValidationError()
+    {
+        // Arrange
+        var dto = CreateValidLanProtocolDto();
+        dto.ProtocolPort = -1;
+
+        // Act
+        var result = _validator.TestValidate(dto);
+
+        // Assert
+        result.ShouldHaveValidationErrorFor(x => x.ProtocolPort)
+            .WithErrorMessage($"协议Id: {dto.Id} 协议类型: {dto.ProtocolType} 端口必须大于0");
+    }
+
+    #endregion
+
+    #region DATABASE接口补充验证
+
+    [Theory(DisplayName = "DATABASE接口DatabaseName为空/空白/null时应该返回校验异常")]
+    [InlineData("")]
+    [InlineData(" ")]
+    [InlineData(null)]
+    public void DatabaseName_WhenDatabaseAndEmpty_ShouldHaveValidationError(string? databaseName)
+    {
+        // Arrange
+        var dto = CreateValidDatabaseProtocolDto();
+        dto.DatabaseName = databaseName;
+        dto.InterfaceType = InterfaceType.DATABASE;
+        dto.ProtocolType = ProtocolType.MySQL;
+
+        // Act
+        var result = _validator.TestValidate(dto);
+
+        // Assert
+        result.ShouldHaveValidationErrorFor(x => x.DatabaseName)
+            .WithErrorMessage($"协议Id: {dto.Id} 协议类型: {dto.ProtocolType} 数据库名称不能为空");
+    }
+
+    #endregion
+
     #region Helper Methods
 
     /// <summary>
@@ -712,6 +856,7 @@ public class ProtocolConfigDtoValidatorTests
             InterfaceTypeValue = InterfaceType.DATABASE,
             ProtocolType = ProtocolType.MySQL,
             DatabaseConnectString = "Server=localhost;Database=test;",
+            DatabaseName = "TestDB",
             QuerySqlString = "SELECT * FROM data",
             CommunicationDelay = 1000,
             ReceiveTimeOut = 500,
@@ -780,11 +925,15 @@ public class ProtocolConfigDtoValidatorTests
     }
 
     /// <summary>
-    /// 测试用的 ProtocolConfigDto 实现类（因为原类是抽象类）
+    /// 测试用的 ProtocolConfigDto 实现类
     /// </summary>
     private class TestProtocolConfigDto : ProtocolConfigDto
     {
-        public InterfaceType InterfaceTypeValue { get; set; }
+        public InterfaceType InterfaceTypeValue
+        {
+            get => InterfaceType;
+            set => InterfaceType = value;
+        }
     }
 
     #endregion

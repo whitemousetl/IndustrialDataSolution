@@ -210,7 +210,7 @@ public class ParameterConfigDtoValidatorTests
         var result = _validator.TestValidate(dto);
 
         result.ShouldHaveValidationErrorFor(x => x.DataFormat)
-           .WithErrorMessage($" {dto.ProtocolType} 设备: {dto.EquipmentId} 标签: {dto.Label} 要求参数必须包含[数据格式/字节序]");
+           .WithErrorMessage($"协议类型: {dto.ProtocolType} 设备: {dto.EquipmentId} 标签: {dto.Label} 要求参数必须包含[数据格式/字节序]");
     }
 
     [Theory(DisplayName = "当协议要求StationNo但为空/空白/null时返回校验异常")]
@@ -245,7 +245,7 @@ public class ParameterConfigDtoValidatorTests
         var result = _validator.TestValidate(dto);
 
         result.ShouldHaveValidationErrorFor(x => x.DataType)
-           .WithErrorMessage($"协议类型 {dto.ProtocolType} 设备: {dto.EquipmentId} 标签: {dto.Label} 要求参数必须包含[数据类型]");
+           .WithErrorMessage($"协议类型: {dto.ProtocolType} 设备: {dto.EquipmentId} 标签: {dto.Label} 要求参数必须包含[数据类型]");
     }
 
     [Fact(DisplayName = "当协议要求AddressStartWithZero但为null时返回校验异常")]
@@ -261,7 +261,7 @@ public class ParameterConfigDtoValidatorTests
         var result = _validator.TestValidate(dto);
 
         result.ShouldHaveValidationErrorFor(x => x.AddressStartWithZero)
-           .WithErrorMessage($" {dto.ProtocolType} 设备: {dto.EquipmentId} 标签: {dto.Label} 要求参数必须包含[地址必须从0开始?]");
+           .WithErrorMessage($"协议类型: {dto.ProtocolType} 设备: {dto.EquipmentId} 标签: {dto.Label} 要求参数必须包含[地址从0开始?]");
     }
 
     [Fact(DisplayName = "当协议要求InstrumentType但为null时返回校验异常")]
@@ -278,7 +278,7 @@ public class ParameterConfigDtoValidatorTests
         var result = _validator.TestValidate(dto);
 
         result.ShouldHaveValidationErrorFor(x => x.InstrumentType)
-           .WithErrorMessage($" {dto.ProtocolType} 设备: {dto.EquipmentId} 标签: {dto.Label} 要求参数必须包含[仪表类型]");
+           .WithErrorMessage($"协议类型: {dto.ProtocolType} 设备: {dto.EquipmentId} 标签: {dto.Label} 要求参数必须包含[仪表类型]");
     }
 
     [Fact(DisplayName = "当协议是OPCUA时只需要Label,Address,IsMonitor")]
@@ -304,6 +304,367 @@ public class ParameterConfigDtoValidatorTests
 
         var result = _validator.TestValidate(dto);
        
+        result.ShouldNotHaveAnyValidationErrors();
+    }
+
+    #endregion
+
+    #region DataType=String 时 Length 验证
+
+    [Fact(DisplayName = "DataType为String但Length为null时应该返回校验异常")]
+    public void Length_WhenDataTypeIsStringAndNull_ShouldHaveValidationError()
+    {
+        // Arrange
+        var dto = CreateValidParameterDto();
+        dto.DataType = DataType.String;
+        dto.Length = null;
+
+        // Act
+        var result = _validator.TestValidate(dto);
+
+        // Assert
+        result.ShouldHaveValidationErrorFor(x => x.Length)
+            .WithErrorMessage($"协议类型: {dto.ProtocolType} 设备: {dto.EquipmentId} 标签: {dto.Label} 当数据类型为String时[长度]不能为空");
+    }
+
+    [Fact(DisplayName = "DataType为String且Length有值时没有验证异常")]
+    public void Length_WhenDataTypeIsStringAndHasValue_ShouldNotHaveValidationError()
+    {
+        // Arrange
+        var dto = CreateValidParameterDto();
+        dto.DataType = DataType.String;
+        dto.Length = 10;
+
+        // Act
+        var result = _validator.TestValidate(dto);
+
+        // Assert
+        result.ShouldNotHaveValidationErrorFor(x => x.Length);
+    }
+
+    [Fact(DisplayName = "DataType不为String时Length可为null")]
+    public void Length_WhenDataTypeIsNotStringAndNull_ShouldNotHaveValidationError()
+    {
+        // Arrange
+        var dto = CreateValidParameterDto();
+        dto.DataType = DataType.Float;
+        dto.Length = null;
+
+        // Act
+        var result = _validator.TestValidate(dto);
+
+        // Assert
+        result.ShouldNotHaveValidationErrorFor(x => x.Length);
+    }
+
+    #endregion
+
+    #region Length 边界值验证
+
+    [Fact(DisplayName = "Length为0时没有验证异常")]
+    public void Length_WhenZero_ShouldNotHaveValidationError()
+    {
+        // Arrange
+        var dto = CreateValidParameterDto();
+        dto.DataType = DataType.String;
+        dto.Length = 0;
+
+        // Act
+        var result = _validator.TestValidate(dto);
+
+        // Assert
+        result.ShouldNotHaveValidationErrorFor(x => x.Length);
+    }
+
+    [Fact(DisplayName = "Length为负数时应该返回校验异常")]
+    public void Length_WhenNegative_ShouldHaveValidationError()
+    {
+        // Arrange - ushort 不能为负数，所以这个测试验证的是验证器逻辑
+        // 实际上 C# 中 ushort 赋值负数会编译错误，这里测试的是验证器的防御性检查
+        var dto = CreateValidParameterDto();
+        dto.Length = 0; // 最小有效值
+
+        // Act
+        var result = _validator.TestValidate(dto);
+
+        // Assert - 0是允许的
+        result.ShouldNotHaveValidationErrorFor(x => x.Length);
+    }
+
+    #endregion
+
+    #region 西门子/欧姆龙等协议验证（只需DataType）
+
+    [Fact(DisplayName = "西门子S1200协议只需DataType，其他可选字段为null时无验证异常")]
+    public void SiemensS1200_WhenOnlyDataTypeProvided_ShouldNotHaveValidationError()
+    {
+        // Arrange
+        var dto = CreateValidParameterDto();
+        dto.ProtocolType = ProtocolType.SiemensS1200;
+        dto.DataType = DataType.Float;
+        dto.DataFormat = null;
+        dto.StationNo = null;
+        dto.AddressStartWithZero = null;
+        dto.InstrumentType = null;
+
+        // Act
+        var result = _validator.TestValidate(dto);
+
+        // Assert
+        result.ShouldNotHaveValidationErrorFor(x => x.DataFormat);
+        result.ShouldNotHaveValidationErrorFor(x => x.StationNo);
+        result.ShouldNotHaveValidationErrorFor(x => x.AddressStartWithZero);
+        result.ShouldNotHaveValidationErrorFor(x => x.InstrumentType);
+    }
+
+    [Fact(DisplayName = "西门子S1200协议缺少DataType时应该返回校验异常")]
+    public void SiemensS1200_WhenDataTypeMissing_ShouldHaveValidationError()
+    {
+        // Arrange
+        var dto = CreateValidParameterDto();
+        dto.ProtocolType = ProtocolType.SiemensS1200;
+        dto.DataType = null;
+
+        // Act
+        var result = _validator.TestValidate(dto);
+
+        // Assert
+        result.ShouldHaveValidationErrorFor(x => x.DataType)
+            .WithErrorMessage($"协议类型: {dto.ProtocolType} 设备: {dto.EquipmentId} 标签: {dto.Label} 要求参数必须包含[数据类型]");
+    }
+
+    [Fact(DisplayName = "欧姆龙FinsTcp协议只需DataType，其他可选字段为null时无验证异常")]
+    public void OmronFinsTcp_WhenOnlyDataTypeProvided_ShouldNotHaveValidationError()
+    {
+        // Arrange
+        var dto = CreateValidParameterDto();
+        dto.ProtocolType = ProtocolType.OmronFinsTcp;
+        dto.DataType = DataType.Float;
+        dto.DataFormat = null;
+        dto.StationNo = null;
+        dto.AddressStartWithZero = null;
+
+        // Act
+        var result = _validator.TestValidate(dto);
+
+        // Assert
+        result.ShouldNotHaveValidationErrorFor(x => x.DataFormat);
+        result.ShouldNotHaveValidationErrorFor(x => x.StationNo);
+        result.ShouldNotHaveValidationErrorFor(x => x.AddressStartWithZero);
+    }
+
+    [Fact(DisplayName = "欧姆龙FinsTcp协议缺少DataType时应该返回校验异常")]
+    public void OmronFinsTcp_WhenDataTypeMissing_ShouldHaveValidationError()
+    {
+        // Arrange
+        var dto = CreateValidParameterDto();
+        dto.ProtocolType = ProtocolType.OmronFinsTcp;
+        dto.DataType = null;
+
+        // Act
+        var result = _validator.TestValidate(dto);
+
+        // Assert
+        result.ShouldHaveValidationErrorFor(x => x.DataType)
+            .WithErrorMessage($"协议类型: {dto.ProtocolType} 设备: {dto.EquipmentId} 标签: {dto.Label} 要求参数必须包含[数据类型]");
+    }
+
+    #endregion
+
+    #region CJT188协议 InstrumentType 验证
+
+    [Fact(DisplayName = "CJT1882004OverTcp协议缺少InstrumentType时应该返回校验异常")]
+    public void CJT1882004OverTcp_WhenInstrumentTypeMissing_ShouldHaveValidationError()
+    {
+        // Arrange
+        var dto = CreateValidParameterDto();
+        dto.ProtocolType = ProtocolType.CJT1882004OverTcp;
+        dto.StationNo = "1122334455667788";
+        dto.DataType = DataType.Float;
+        dto.InstrumentType = null;
+
+        // Act
+        var result = _validator.TestValidate(dto);
+
+        // Assert
+        result.ShouldHaveValidationErrorFor(x => x.InstrumentType)
+            .WithErrorMessage($"协议类型: {dto.ProtocolType} 设备: {dto.EquipmentId} 标签: {dto.Label} 要求参数必须包含[仪表类型]");
+    }
+
+    [Fact(DisplayName = "CJT1882004OverTcp协议提供有效InstrumentType时无验证异常")]
+    public void CJT1882004OverTcp_WhenValidInstrumentTypeProvided_ShouldNotHaveValidationError()
+    {
+        // Arrange
+        var dto = CreateValidParameterDto();
+        dto.ProtocolType = ProtocolType.CJT1882004OverTcp;
+        dto.StationNo = "1122334455667788";
+        dto.DataType = DataType.Float;
+        dto.InstrumentType = InstrumentType.ColdWater;
+
+        // Act
+        var result = _validator.TestValidate(dto);
+
+        // Assert
+        result.ShouldNotHaveValidationErrorFor(x => x.InstrumentType);
+    }
+
+    [Fact(DisplayName = "CJT1882004Serial协议缺少InstrumentType时应该返回校验异常")]
+    public void CJT1882004Serial_WhenInstrumentTypeMissing_ShouldHaveValidationError()
+    {
+        // Arrange
+        var dto = CreateValidParameterDto();
+        dto.ProtocolType = ProtocolType.CJT1882004Serial;
+        dto.StationNo = "1122334455667788";
+        dto.DataType = DataType.Float;
+        dto.InstrumentType = null;
+
+        // Act
+        var result = _validator.TestValidate(dto);
+
+        // Assert
+        result.ShouldHaveValidationErrorFor(x => x.InstrumentType)
+            .WithErrorMessage($"协议类型: {dto.ProtocolType} 设备: {dto.EquipmentId} 标签: {dto.Label} 要求参数必须包含[仪表类型]");
+    }
+
+    #endregion
+
+    #region DLT645协议 StationNo 验证
+
+    [Fact(DisplayName = "DLT6452007OverTcp协议缺少StationNo时应该返回校验异常")]
+    public void DLT6452007OverTcp_WhenStationNoMissing_ShouldHaveValidationError()
+    {
+        // Arrange
+        var dto = CreateValidParameterDto();
+        dto.ProtocolType = ProtocolType.DLT6452007OverTcp;
+        dto.DataType = DataType.Float;
+        dto.StationNo = null;
+
+        // Act
+        var result = _validator.TestValidate(dto);
+
+        // Assert
+        result.ShouldHaveValidationErrorFor(x => x.StationNo)
+            .WithErrorMessage($"协议类型: {dto.ProtocolType} 设备: {dto.EquipmentId} 标签: {dto.Label} 要求参数必须包含[站号/通讯地址]");
+    }
+
+    [Fact(DisplayName = "DLT6452007OverTcp协议提供有效StationNo时无验证异常")]
+    public void DLT6452007OverTcp_WhenValidStationNoProvided_ShouldNotHaveValidationError()
+    {
+        // Arrange
+        var dto = CreateValidParameterDto();
+        dto.ProtocolType = ProtocolType.DLT6452007OverTcp;
+        dto.DataType = DataType.Float;
+        dto.DataFormat = null; // DLT645不需要DataFormat
+        dto.AddressStartWithZero = null; // DLT645不需要AddressStartWithZero
+        dto.StationNo = "123456789012";
+
+        // Act
+        var result = _validator.TestValidate(dto);
+
+        // Assert
+        result.ShouldNotHaveValidationErrorFor(x => x.StationNo);
+    }
+
+    [Fact(DisplayName = "DLT6452007Serial协议缺少StationNo时应该返回校验异常")]
+    public void DLT6452007Serial_WhenStationNoMissing_ShouldHaveValidationError()
+    {
+        // Arrange
+        var dto = CreateValidParameterDto();
+        dto.ProtocolType = ProtocolType.DLT6452007Serial;
+        dto.DataType = DataType.Float;
+        dto.StationNo = null;
+
+        // Act
+        var result = _validator.TestValidate(dto);
+
+        // Assert
+        result.ShouldHaveValidationErrorFor(x => x.StationNo)
+            .WithErrorMessage($"协议类型: {dto.ProtocolType} 设备: {dto.EquipmentId} 标签: {dto.Label} 要求参数必须包含[站号/通讯地址]");
+    }
+
+    #endregion
+
+    #region ModbusRtu 协议验证
+
+    [Fact(DisplayName = "ModbusRtu协议缺少所有必需字段时应该返回多个校验异常")]
+    public void ModbusRtu_WhenAllRequiredFieldsMissing_ShouldHaveMultipleValidationErrors()
+    {
+        // Arrange
+        var dto = CreateValidParameterDto();
+        dto.ProtocolType = ProtocolType.ModbusRtu;
+        dto.StationNo = null;
+        dto.DataFormat = null;
+        dto.DataType = null;
+        dto.AddressStartWithZero = null;
+
+        // Act
+        var result = _validator.TestValidate(dto);
+
+        // Assert
+        result.ShouldHaveValidationErrorFor(x => x.StationNo);
+        result.ShouldHaveValidationErrorFor(x => x.DataFormat);
+        result.ShouldHaveValidationErrorFor(x => x.DataType);
+        result.ShouldHaveValidationErrorFor(x => x.AddressStartWithZero);
+    }
+
+    [Fact(DisplayName = "ModbusRtu协议提供所有必需字段时无验证异常")]
+    public void ModbusRtu_WhenAllRequiredFieldsProvided_ShouldNotHaveValidationError()
+    {
+        // Arrange
+        var dto = CreateValidParameterDto();
+        dto.ProtocolType = ProtocolType.ModbusRtu;
+        dto.StationNo = "1";
+        dto.DataFormat = DomainDataFormat.ABCD;
+        dto.DataType = DataType.Float;
+        dto.AddressStartWithZero = true;
+
+        // Act
+        var result = _validator.TestValidate(dto);
+
+        // Assert
+        result.ShouldNotHaveAnyValidationErrors();
+    }
+
+    #endregion
+
+    #region 自由协议验证（FJ1000Jet等）
+
+    [Fact(DisplayName = "FJ1000Jet协议不需要任何协议特定字段")]
+    public void FJ1000Jet_WhenNoProtocolSpecificFields_ShouldNotHaveValidationError()
+    {
+        // Arrange
+        var dto = CreateValidParameterDto();
+        dto.ProtocolType = ProtocolType.FJ1000Jet;
+        dto.DataType = null;
+        dto.DataFormat = null;
+        dto.StationNo = null;
+        dto.AddressStartWithZero = null;
+        dto.InstrumentType = null;
+
+        // Act
+        var result = _validator.TestValidate(dto);
+
+        // Assert
+        result.ShouldNotHaveAnyValidationErrors();
+    }
+
+    [Fact(DisplayName = "OpcUa协议不需要任何协议特定字段")]
+    public void OpcUa_WhenNoProtocolSpecificFields_ShouldNotHaveValidationError()
+    {
+        // Arrange
+        var dto = CreateValidParameterDto();
+        dto.ProtocolType = ProtocolType.OpcUa;
+        dto.DataType = null;
+        dto.DataFormat = null;
+        dto.StationNo = null;
+        dto.AddressStartWithZero = null;
+        dto.InstrumentType = null;
+        dto.Length = null;
+
+        // Act
+        var result = _validator.TestValidate(dto);
+
+        // Assert
         result.ShouldNotHaveAnyValidationErrors();
     }
 

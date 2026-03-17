@@ -8,20 +8,19 @@ using SqlSugar;
 namespace IndustrialDataProcessor.Infrastructure.Persistence.Repositories;
 
 /// <summary>
-/// 工作站配置实体仓储实现
+/// 工作站配置持久化仓储实现
+/// <para>负责工作站配置实体的数据库 CRUD 操作</para>
 /// </summary>
-public class WorkstationConfigEntityRepository : IWorkstationConfigEntityRepository
+public class WorkstationConfigPersistenceRepository : IWorkstationConfigPersistenceRepository
 {
     private readonly ISqlSugarClient _db;
 
-    public WorkstationConfigEntityRepository(ISqlSugarClient db)
+    public WorkstationConfigPersistenceRepository(ISqlSugarClient db)
     {
         _db = db ?? throw new ArgumentNullException(nameof(db), "SqlSugar数据库客户端不能为空");
     }
 
-    /// <summary>
-    /// 添加工作站配置
-    /// </summary>
+    /// <inheritdoc/>
     public async Task AddAsync(WorkstationConfigEntity config, CancellationToken token = default)
     {
         ArgumentNullException.ThrowIfNull(config);
@@ -35,9 +34,7 @@ public class WorkstationConfigEntityRepository : IWorkstationConfigEntityReposit
         }
     }
 
-    /// <summary>
-    /// 获取最新的工作站配置
-    /// </summary>
+    /// <inheritdoc/>
     public async Task<WorkstationConfigEntity?> GetLatestAsync(CancellationToken token = default)
     {
         var po = await _db.Queryable<WorkstationConfigPo>()

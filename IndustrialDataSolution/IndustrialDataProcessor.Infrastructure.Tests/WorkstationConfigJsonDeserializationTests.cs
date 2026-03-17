@@ -3,11 +3,13 @@ using IndustrialDataProcessor.Domain.Entities;
 using IndustrialDataProcessor.Domain.Repositories;
 using IndustrialDataProcessor.Domain.Workstation.Configs;
 using IndustrialDataProcessor.Domain.Workstation.Configs.ProtocolSub;
-using IndustrialDataProcessor.Infrastructure.Repositories;
-using IndustrialDataProcessor.Infrastructure.Serialization.Converters;
+using IndustrialDataProcessor.Infrastructure.Persistence.Repositories;
+using IndustrialDataProcessor.Infrastructure.Serialization;
 using Microsoft.Extensions.Logging;
 using Moq;
+using System.Text.Encodings.Web;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace IndustrialDataProcessor.Infrastructure.Tests;
 
@@ -22,8 +24,14 @@ public class WorkstationConfigJsonDeserializationTests
     {
         _jsonOptions = new JsonSerializerOptions
         {
+            PropertyNamingPolicy = null,
             PropertyNameCaseInsensitive = true,
-            Converters = { new ProtocolConfigJsonConverter() }
+            WriteIndented = false,
+            Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+            NumberHandling = JsonNumberHandling.Strict,
+            MaxDepth = 64,
+            Converters = { new ProtocolConfigPolymorphicConverter(), new JsonStringEnumConverter() }
         };
     }
 
@@ -69,8 +77,8 @@ public class WorkstationConfigJsonDeserializationTests
     [Fact]
     public async Task WorkstationConfigRepository_GetLatestParsedConfigAsync_ShouldReturnCorrectData()
     {
-        // Arrange - 模拟 IWorkstationConfigEntityRepository
-        var mockEntityRepo = new Mock<IWorkstationConfigEntityRepository>();
+        // Arrange - 模拟 IWorkstationConfigPersistenceRepository
+        var mockEntityRepo = new Mock<IWorkstationConfigPersistenceRepository>();
         var mockLogger = new Mock<ILogger<WorkstationConfigRepository>>();
 
         var entity = new WorkstationConfigEntity
@@ -83,7 +91,7 @@ public class WorkstationConfigJsonDeserializationTests
             .Setup(r => r.GetLatestAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(entity);
 
-        var repository = new WorkstationConfigRepository(mockEntityRepo.Object, mockLogger.Object);
+        var repository = new WorkstationConfigRepository(mockEntityRepo.Object, mockLogger.Object, _jsonOptions);
 
         // Act
         var config = await repository.GetLatestParsedConfigAsync(CancellationToken.None);

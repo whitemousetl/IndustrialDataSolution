@@ -3,33 +3,23 @@ using IndustrialDataProcessor.Application.Dtos.WorkstationDto;
 
 namespace IndustrialDataProcessor.Application.Validators;
 
+/// <summary>
+/// 工作站配置验证器
+/// Id, IpAddress, Name 都可以为空
+/// Protocols 不能为空且元素数量不能为零
+/// </summary>
 public class WorkstationConfigDtoValidator : AbstractValidator<WorkstationConfigDto>
 {
     public WorkstationConfigDtoValidator()
     {
-        RuleFor(x => x.Id)
-            .NotEmpty()
-            .WithMessage("工作站ID不能为空");
+        // Id, IpAddress, Name 可为空，不做验证
 
-        RuleFor(x => x.IpAddress)
-            .NotEmpty()
-            .WithMessage("工作站IP地址不能为空")
-            .Must(BeValidIpAddress)
-            .WithMessage("IP地址格式不正确");
-
+        // 协议列表不能为空且元素数量不能为零
         RuleFor(x => x.Protocols)
+            .NotNull()
+            .WithMessage("协议列表不能为null")
             .NotEmpty()
-            .WithMessage("协议列表不能为空")
+            .WithMessage("协议列表不能为空，至少需要一个协议配置")
             .ForEach(protocol => protocol.SetValidator(new ProtocolConfigDtoValidator()));
-    }
-
-    private static bool BeValidIpAddress(string? ipAddress)
-    {
-        if (string.IsNullOrWhiteSpace(ipAddress))
-            return false;
-
-        var result = System.Net.IPAddress.TryParse(ipAddress, out var parsedIp)
-               && parsedIp.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork;
-        return result;
     }
 }

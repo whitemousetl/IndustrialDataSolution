@@ -4,9 +4,13 @@ using IndustrialDataProcessor.Domain.Workstation.Configs.ProtocolSub;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace IndustrialDataProcessor.Infrastructure.Serialization.Converters;
+namespace IndustrialDataProcessor.Infrastructure.Serialization;
 
-public class ProtocolConfigJsonConverter : JsonConverter<ProtocolConfig>
+/// <summary>
+/// ProtocolConfig 多态 JSON 转换器
+/// 根据 InterfaceType 鉴别器字段，将 JSON 反序列化为对应的派生类型
+/// </summary>
+public class ProtocolConfigPolymorphicConverter : JsonConverter<ProtocolConfig>
 {
     public override ProtocolConfig? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {

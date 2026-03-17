@@ -2,6 +2,7 @@ using IndustrialDataProcessor.Api.BackgroundServices;
 using IndustrialDataProcessor.Api.Middleware;
 using IndustrialDataProcessor.Application;
 using IndustrialDataProcessor.Infrastructure;
+using System.Text.Json.Serialization;
 
 namespace IndustrialDataProcessor.Api;
 
@@ -22,7 +23,13 @@ public class Program
 
         // 注册健康检查和控制器
         builder.Services.AddHealthChecks();
-        builder.Services.AddControllers();
+        builder.Services.AddControllers()
+            .AddJsonOptions(options =>
+            {
+                // 复用 Infrastructure 层的公共 JSON 配置，保证全局一致性
+                Infrastructure.DependencyInjection.ApplyCommonJsonSettings(options.JsonSerializerOptions);
+                options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter(namingPolicy: null, allowIntegerValues: true));
+            });
         builder.Services.AddEndpointsApiExplorer();
         builder.Services.AddSwaggerGen();
 

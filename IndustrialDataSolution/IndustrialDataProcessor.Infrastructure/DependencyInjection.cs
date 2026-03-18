@@ -4,6 +4,7 @@ using IndustrialDataProcessor.Domain.Repositories;
 using IndustrialDataProcessor.Infrastructure.BackgroundServices;
 using IndustrialDataProcessor.Infrastructure.Communication.Connection;
 using IndustrialDataProcessor.Infrastructure.EquipmentCollectionDataProcessing;
+using IndustrialDataProcessor.Infrastructure.OpcUa;
 using IndustrialDataProcessor.Infrastructure.Persistence.Repositories;
 using IndustrialDataProcessor.Infrastructure.Serialization;
 using Microsoft.Extensions.Configuration;
@@ -22,6 +23,9 @@ public static class DependencyInjection
     /// </summary>
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
+        // 0.绑定 OPC UA 配置选项
+        services.Configure<OpcUaOptions>(configuration.GetSection(OpcUaOptions.SectionName));
+
         // 1. 配置 SqlSugar 数据库客户端
         ConfigureSqlSugar(services, configuration);
 
@@ -40,10 +44,13 @@ public static class DependencyInjection
         // 6. 注册设备数据处理器
         RegisterDataProcessors(services);
 
-        // 7. 自动注册协议驱动
+        // 7. 注册配置缓存服务
+        RegisterConfigCache(services);
+
+        // 8. 自动注册协议驱动
         RegisterProtocolDrivers(services);
 
-        // 8. 配置 JSON 序列化选项
+        // 9. 配置 JSON 序列化选项
         ConfigureJsonOptions(services);
 
         return services;
@@ -125,6 +132,15 @@ public static class DependencyInjection
         services.AddSingleton<IEquipmentDataProcessor, EquipmentDataProcessor>();
         services.AddSingleton<PointExpressionConverter>();
         services.AddSingleton<VirtualPointCalculator>();
+    }
+
+    /// <summary>
+    /// 注册配置缓存服务
+    /// </summary>
+    private static void RegisterConfigCache(IServiceCollection services)
+    {
+        // 注册为单例，确保全局共享同一缓存实例
+        services.AddSingleton<IWorkstationConfigCache, WorkstationConfigCache>();
     }
 
     /// <summary>

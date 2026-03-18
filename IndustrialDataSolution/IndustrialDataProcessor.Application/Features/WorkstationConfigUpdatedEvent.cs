@@ -23,15 +23,17 @@ public class WorkstationConfigUpdatedEvent : INotification
 /// 如果需要添加新的事件处理逻辑，可以创建新的 Handler 类实现 INotificationHandler
 /// </remarks>
 public class WorkstationConfigUpdatedEventHandler(
-    IConnectionManager connectionManager, 
-    ICollectionTaskManager taskManager, 
+    IConnectionManager connectionManager,
+    ICollectionTaskManager taskManager,
     ILogger<WorkstationConfigUpdatedEventHandler> logger,
-    IDataPublishServerManager dataPublishServerManager) : INotificationHandler<WorkstationConfigUpdatedEvent>
+    IDataPublishServerManager dataPublishServerManager,
+    IWorkstationConfigCache configCache) : INotificationHandler<WorkstationConfigUpdatedEvent>
 {
     private readonly IConnectionManager _connectionManager = connectionManager;
     private readonly ICollectionTaskManager _taskManager = taskManager;
     private readonly ILogger<WorkstationConfigUpdatedEventHandler> _logger = logger;
     private readonly IDataPublishServerManager _dataPublishServerManager = dataPublishServerManager;
+    private readonly IWorkstationConfigCache _configCache = configCache;
 
     public Task Handle(WorkstationConfigUpdatedEvent notification, CancellationToken cancellationToken)
     {
@@ -53,13 +55,17 @@ public class WorkstationConfigUpdatedEventHandler(
         {
             _logger.LogInformation("开始执行后台配置更新操作...");
 
-            // 1. 关闭底层的旧物理连接（避免地址占用的冲突）
+            // 1. 【新增】清空配置缓存，强制下次重新加载最新配置
+            _configCache.ClearCache();
+            _logger.LogInformation("配置缓存已清空，下次将加载最新配置");
+
+            // 2. 关闭底层的旧物理连接（避免地址占用的冲突）
             await _connectionManager.ClearAllConnectionsAsync();
 
-            // 2. 命令任务管理器，杀掉所有旧线程，重新去数据库读最新配置并启动新线程
+            // 3. 命令任务管理器，杀掉所有旧线程，重新去数据库读最新配置并启动新线程
             await _taskManager.StartOrRestartAllTasksAsync(cancellationToken);
 
-            // 3. 杀掉并基于最新配置重新生成数据发布服务器 
+            // 4. 杀掉并基于最新配置重新生成数据发布服务器
             await _dataPublishServerManager.StartOrRestartServerAsync();
 
             _logger.LogInformation("后台配置更新操作完成，所有服务已切换到最新配置。");

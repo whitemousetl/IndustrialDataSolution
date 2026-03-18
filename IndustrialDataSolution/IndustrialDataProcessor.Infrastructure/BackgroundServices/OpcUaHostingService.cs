@@ -8,6 +8,7 @@ using IndustrialDataProcessor.Infrastructure.OpcUa;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Opc.Ua;
 using Opc.Ua.Configuration;
 
@@ -23,7 +24,9 @@ public class OpcUaHostingService(
     ILogger<OpcUaHostingService> logger,
     IConnectionManager connectionManager,
     IEnumerable<IProtocolDriver> drivers,
-    PointExpressionConverter pointExpressionConverter) : BackgroundService, IDataPublishServerManager
+    PointExpressionConverter pointExpressionConverter,
+    IWorkstationConfigCache configCache,
+    IOptions<OpcUaOptions> opcUaOptions) : BackgroundService, IDataPublishServerManager
 {
     private WorkstationOpcServer? _opcServer;
 
@@ -37,6 +40,8 @@ public class OpcUaHostingService(
     private readonly IConnectionManager _connectionManager = connectionManager; // 连接管理器
     private readonly IEnumerable<IProtocolDriver> _drivers = drivers;
     private readonly PointExpressionConverter _pointExpressionConverter = pointExpressionConverter;
+    private readonly IWorkstationConfigCache _configCache = configCache;
+    private readonly OpcUaOptions _opcUaOptions = opcUaOptions.Value;
 
     // 宿主程序退出时的最终 Token
     private CancellationToken _appStoppingToken;
@@ -64,32 +69,33 @@ public class OpcUaHostingService(
         await _restartLock.WaitAsync(_appStoppingToken);
         try
         {
-            _logger.LogInformation("准备启动/重启 OPC UA 服务器...");
+            _logger.LogInformation("[OPC UA] 开始启动/重启服务器...");
 
             // 1. 如果之前有服务器在跑，发信号取消并停止它
             if (_currentCts != null && !_currentCts.IsCancellationRequested)
             {
-                _logger.LogInformation("正在停止旧的 OPC UA 服务器实例...");
+                _logger.LogInformation("[OPC UA] 正在停止旧的服务器实例...");
                 await _currentCts.CancelAsync();
 
                 if (_opcServer != null)
                 {
-                    await _opcServer.StopAsync(); // 停止底层 OPC Server
+                    await _opcServer.StopAsync();
                     _opcServer = null;
                 }
 
-                // 可选的一小段延时，确保端口已经被完全释放
+                // 延时确保端口已经完全释放
                 await Task.Delay(1000, _appStoppingToken);
                 _currentCts.Dispose();
+                _logger.LogInformation("[OPC UA] 旧服务器实例已停止");
             }
 
             // 2. 创建针对新一轮运行生命周期的 CancellationToken
             _currentCts = CancellationTokenSource.CreateLinkedTokenSource(_appStoppingToken);
 
-            // 3. 将服务器核心逻辑丢到后台执行（类似于任务管理器）
+            // 3. 将服务器核心逻辑丢到后台执行
             _ = RunServerLoopAsync(_currentCts.Token);
 
-            _logger.LogInformation("OPC UA 服务器重启任务已在后台下发完毕。");
+            _logger.LogInformation("[OPC UA] 服务器重启任务已在后台下发完毕");
         }
         finally
         {
@@ -101,17 +107,24 @@ public class OpcUaHostingService(
     {
         try
         {
-            // 1. 获取配置以启动服务器 (通过创建一个新的 Scope 解析 Repository)
+            // 1. 使用缓存获取配置，避免重复数据库查询
             WorkstationConfig? workstationConfig = null;
 
             using (var scope = serviceProvider.CreateScope())
             {
                 var repository = scope.ServiceProvider.GetRequiredService<IWorkstationConfigRepository>();
-                using (_logger.BeginScope("Caller: {CallerService}", nameof(OpcUaHostingService)))
-                    workstationConfig = await repository.GetLatestParsedConfigAsync(loopToken);
+                workstationConfig = await _configCache.GetOrLoadAsync(repository, loopToken);
             }
 
-            if (workstationConfig == null) return;
+            // 2. 检查配置有效性
+            if (workstationConfig == null)
+            {
+                _logger.LogWarning("[OPC UA] 无法获取工作站配置，当前无可用配置数据。等待配置更新后自动重启...");
+                return;
+            }
+
+            _logger.LogInformation("[OPC UA] 成功加载工作站配置，缓存版本: {CacheVersion}, 工作站ID: {WorkstationId}",
+                _configCache.Version, workstationConfig.Id);
 
             // 2. 启动 OPC UA Server
             var app = new ApplicationInstance((ITelemetryContext)null!)
@@ -121,16 +134,16 @@ public class OpcUaHostingService(
                 ConfigSectionName = "WorkstationOpcServer"
             };
 
-            var opcUaServerConfig = await CreateServerConfigurationAsync();
+            var opcUaServerConfig = await CreateServerConfigurationAsync(_opcUaOptions.Endpoint);
             app.ApplicationConfiguration = opcUaServerConfig;
             await app.CheckApplicationInstanceCertificatesAsync(false, 0, loopToken);
 
             _opcServer = new WorkstationOpcServer(workstationConfig);
 
-            // 注意: 使用 app.StartAsync 启动服务
+            // 启动 OPC UA 服务
             await app.StartAsync(_opcServer);
 
-            _logger.LogInformation("最新的 OPC UA 服务器已挂载并开始运行监听...");
+            _logger.LogInformation("[OPC UA] 服务器已启动并开始监听，服务端点: {Endpoint}", _opcUaOptions.Endpoint);
 
             // 3. 挂载 OPC 客户端写入事件
             _opcServer.CustomNodeManager.OnOpcClientWriteRequestedAsync += async (protocol, eq, point, value) =>
@@ -175,15 +188,15 @@ public class OpcUaHostingService(
         }
         catch (OperationCanceledException)
         {
-            _logger.LogInformation("OPC UA 服务器当前运作循环已被取消/终止。");
+            _logger.LogInformation("[OPC UA] 服务器运行循环已正常取消");
         }
         catch (Exception ex)
         {
-            _logger.LogCritical(ex, "OPC UA 服务器在运行过程中发生致命错误！");
+            _logger.LogCritical(ex, "[OPC UA] 服务器运行过程中发生致命错误，服务将停止");
         }
     }
 
-    private static async Task<ApplicationConfiguration> CreateServerConfigurationAsync()
+    private static async Task<ApplicationConfiguration> CreateServerConfigurationAsync(string endpoint)
     {
         var config = new ApplicationConfiguration()
         {
@@ -203,7 +216,7 @@ public class OpcUaHostingService(
             TransportQuotas = new TransportQuotas { OperationTimeout = 15000 },
             ServerConfiguration = new ServerConfiguration
             {
-                BaseAddresses = ["opc.tcp://0.0.0.0:4840/WorkstationServer"],
+                BaseAddresses = [endpoint],
                 SecurityPolicies = [new ServerSecurityPolicy { SecurityMode = MessageSecurityMode.None, SecurityPolicyUri = SecurityPolicies.None }],
                 UserTokenPolicies = [new UserTokenPolicy(UserTokenType.Anonymous)]
             }

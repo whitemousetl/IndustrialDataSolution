@@ -7,9 +7,17 @@ using System.Diagnostics;
 
 namespace IndustrialDataProcessor.Application.Services;
 
-public class DataCollectionAppService(IWorkstationConfigRepository repository, IConnectionManager connectionManager, IEnumerable<IProtocolDriver> drivers, ILogger<DataCollectionAppService> logger, DataCollectionChannel dataChannel, IEquipmentDataProcessor equipmentDataProcessor) : IDataCollectionAppService
+public class DataCollectionAppService(
+    IWorkstationConfigRepository repository,
+    IWorkstationConfigCache configCache,
+    IConnectionManager connectionManager,
+    IEnumerable<IProtocolDriver> drivers,
+    ILogger<DataCollectionAppService> logger,
+    DataCollectionChannel dataChannel,
+    IEquipmentDataProcessor equipmentDataProcessor) : IDataCollectionAppService
 {
     private readonly IWorkstationConfigRepository _repository = repository;
+    private readonly IWorkstationConfigCache _configCache = configCache;
     private readonly IConnectionManager _connectionManager = connectionManager;
     private readonly IEnumerable<IProtocolDriver> _drivers = drivers;
     private readonly ILogger<DataCollectionAppService> _logger = logger;
@@ -21,25 +29,36 @@ public class DataCollectionAppService(IWorkstationConfigRepository repository, I
     /// </summary>
     public async Task StartAllProtocolCollectionTasksAsync(CancellationToken token)
     {
-        // 1. 获取最新配置
-        WorkstationConfig? workstation;
-        using (_logger.BeginScope("Caller: {CallerService}", nameof(DataCollectionAppService)))
-            workstation = await _repository.GetLatestParsedConfigAsync(token);
+        // 1. 使用缓存获取配置，避免重复数据库查询
+        var workstation = await _configCache.GetOrLoadAsync(_repository, token);
 
-        if (workstation == null || workstation.Protocols == null || workstation.Protocols.Count == 0)
+        // 2. 检查配置有效性
+        if (workstation == null)
         {
-            _logger.LogWarning("未找到工作站配置，无法启动采集服务。");
+            _logger.LogWarning("[数据采集] 无法获取工作站配置，当前无可用配置数据。等待配置更新后自动重启...");
             return;
         }
 
-        _logger.LogInformation("加载到 {count} 个协议配置，准备启动独立采集线程...", workstation.Protocols.Count);
+        if (workstation.Protocols == null || workstation.Protocols.Count == 0)
+        {
+            _logger.LogWarning("[数据采集] 工作站配置中未找到任何协议配置，无需启动采集任务。等待配置更新后自动重启...");
+            return;
+        }
 
-        // 2. 针对每个协议，创建一个游离不阻塞的 Task.Run (在后台独立循环)
+        _logger.LogInformation("[数据采集] 成功加载配置，包含 {ProtocolCount} 个协议，缓存版本: {CacheVersion}",
+            workstation.Protocols.Count, _configCache.Version);
+
+        // 3. 针对每个协议，创建一个游离不阻塞的 Task.Run (在后台独立循环)
         foreach(var protocol in workstation.Protocols)
         {
+            _logger.LogInformation("[数据采集] 启动协议 [{ProtocolId}] 的采集线程，协议类型: {ProtocolType}",
+                protocol.Id, protocol.ProtocolType);
+
             // 通过 Task.Run 让这个长循环在线程池上跑，互不影响
             _ = Task.Run(() => LongRunningProtocolCycleAsync(protocol, token), token);
         }
+
+        _logger.LogInformation("[数据采集] 所有协议采集线程已启动，共 {Count} 个", workstation.Protocols.Count);
     }
 
     /// <summary>
@@ -169,7 +188,8 @@ public class DataCollectionAppService(IWorkstationConfigRepository repository, I
                 protocolResult.ErrorMsg = $"协议级异常: {ex.Message}";
                 protocolResult.FailedEquipments = protocolResult.TotalEquipments;
 
-                _logger.LogError(ex, "协议 [{ProtocolId}] 采集周期发生底层或连接异常，将在延时后重试...", protocol.Id);
+                _logger.LogError(ex, "[数据采集] 协议 [{ProtocolId}] 采集周期发生异常，将在 {DelayMs}ms 后重试",
+                    protocol.Id, protocol.CommunicationDelay);
             }
             finally
             {
@@ -195,7 +215,7 @@ public class DataCollectionAppService(IWorkstationConfigRepository repository, I
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
-                    _logger.LogError(ex, "写入数据通道失败.");
+                    _logger.LogError(ex, "[数据采集] 写入数据通道失败，协议: {ProtocolId}", protocol.Id);
                 }
             }
 

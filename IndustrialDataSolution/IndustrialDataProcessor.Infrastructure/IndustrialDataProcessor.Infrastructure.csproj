@@ -28,7 +28,6 @@
     <Folder Include="Communication\Drivers\SerialPortCommon\" />
     <Folder Include="Communication\Drivers\SerialPortSpecial\" />
     <Folder Include="Communication\Drivers\Database\" />
-    <Folder Include="Communication\Drivers\Api\" />
     <Folder Include="Persistence\DbEntities\" />
     <Folder Include="Persistence\Mappers\" />
   </ItemGroup>

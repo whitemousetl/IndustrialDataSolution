@@ -21,3 +21,11 @@ public class SiemensS7NetDriver : BaseProtocolDriver<SiemensS7Net>
     }
 }
 
+// 增加以下基于同一实现的薄包装类，依赖注入扫描时会把这些类名(去除Driver)和ProtocolType匹配上
+public class SiemensS1200Driver : SiemensS7NetDriver { }
+public class SiemensS1500Driver : SiemensS7NetDriver { }
+public class SiemensS200Driver : SiemensS7NetDriver { }
+public class SiemensS300Driver : SiemensS7NetDriver { }
+public class SiemensS400Driver : SiemensS7NetDriver { }
+public class SiemensS200SmartDriver : SiemensS7NetDriver { }
+

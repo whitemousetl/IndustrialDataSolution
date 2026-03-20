@@ -16,6 +16,8 @@ using Opc.Ua.Client;
 using Opc.Ua.Configuration;
 using System.Collections.Concurrent;
 using System.Data.Common;
+using System.Net.Http.Headers;
+using System.Text;
 
 namespace IndustrialDataProcessor.Infrastructure.Communication.Connection;
 
@@ -49,9 +51,14 @@ public class ConnectionManager : IConnectionManager, IAsyncDisposable
             // COM 接口
             return await CreateComConnectionAsync(serialConfig, token);
         }
+        else if (config is HttpApiInterfaceConfig apiConfig)
+        {
+            // API 接口
+            return await CreateApiConnectionAsync(apiConfig, token);
+        }
         else
         {
-            // API 或 DATABASE 等其他接口处理 (可按需在这里扩展 config is ApiProtocolConfig 等)
+            // DATABASE 或其他接口处理 (可按需在这里扩展 config is DatabaseInterfaceConfig 等)
             throw new NotSupportedException($"暂不支持的接口配置类型: {config.GetType().Name}");
         }
     }
@@ -368,6 +375,41 @@ public class ConnectionManager : IConnectionManager, IAsyncDisposable
             default:
                 throw new NotSupportedException($"不支持的 COM 协议类型: {serialConfig.ProtocolType}");
         }
+    }
+
+    /// <summary>
+    /// 处理 HTTP API 的协议连接
+    /// </summary>
+    private Task<IConnectionHandle> CreateApiConnectionAsync(HttpApiInterfaceConfig apiConfig, CancellationToken token)
+    {
+        // 创建 HttpClient 并配置
+        var httpClient = new HttpClient
+        {
+            Timeout = TimeSpan.FromMilliseconds(apiConfig.ReceiveTimeOut > 0 ? apiConfig.ReceiveTimeOut : 10000)
+        };
+
+        // 设置默认请求头
+        httpClient.DefaultRequestHeaders.Accept.Clear();
+        httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+        // 如果有账号密码，添加Basic认证
+        if (!string.IsNullOrWhiteSpace(apiConfig.Account) && !string.IsNullOrWhiteSpace(apiConfig.Password))
+        {
+            var credentials = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{apiConfig.Account}:{apiConfig.Password}"));
+            httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", credentials);
+        }
+
+        // 创建连接句柄
+        var handle = new HttpApiConnectionHandle(
+            httpClient,
+            apiConfig.AccessApiString,
+            apiConfig.RequestMethod ?? RequestMethod.Get,
+            apiConfig.Account,
+            apiConfig.Password,
+            apiConfig.Gateway
+        );
+
+        return Task.FromResult<IConnectionHandle>(handle);
     }
 
     public async Task ClearAllConnectionsAsync()

@@ -1,6 +1,6 @@
 ﻿using IndustrialDataProcessor.Domain.Enums;
 
-namespace IndustrialDataProcessor.Application.Dtos.WorkstationDto;
+namespace IndustrialDataProcessor.Contracts.WorkstationDto;
 
 /// <summary>
 /// 参数/变量配置DTO

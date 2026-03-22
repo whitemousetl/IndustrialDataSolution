@@ -1,0 +1,50 @@
+﻿<Application x:Class="IndustrialDataProcessor.WpfClient.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:IndustrialDataProcessor.WpfClient"
+             xmlns:vm="clr-namespace:IndustrialDataProcessor.WpfClient.ViewModels"
+             xmlns:views="clr-namespace:IndustrialDataProcessor.WpfClient.Views"
+             StartupUri="/Views/MainWindow.xaml">
+    <Application.Resources>
+         <!-- HandyControl 基础样式 -->
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/HandyControl;component/Themes/SkinDefault.xaml" />
+                <ResourceDictionary Source="pack://application:,,,/HandyControl;component/Themes/Theme.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+
+             <!--ViewModel → View 映射-->
+            <!--<DataTemplate DataType="{x:Type vm:MainWindowViewModel}">
+                <views:MainWindow/>
+            </DataTemplate>-->
+            <DataTemplate DataType="{x:Type vm:WorkstationConfigViewModel}">
+                <views:WorkstationConfig/>
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:ProtocolConfigViewModel}">
+                <views:ProtocolConfig/>
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:TaskControlViewModel}">
+                <views:TaskControl/>
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:TaskStatusViewModel}">
+                <views:TaskStatus/>
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:RealTimeMonitorViewModel}">
+                <views:RealTimeMonitor/>
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:AlarmRealtimeViewModel}">
+                <views:AlarmRealtime/>
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:AlarmHistoryViewModel}">
+                <views:AlarmHistory/>
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:LogViewModel}">
+                <views:Log/>
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:SettingsViewModel}">
+                <views:Settings/>
+            </DataTemplate>
+
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

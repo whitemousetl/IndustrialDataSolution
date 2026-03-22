@@ -1,6 +1,6 @@
 ﻿using IndustrialDataProcessor.Api.Models;
 using IndustrialDataProcessor.Application.Features;
-using IndustrialDataProcessor.Application.Dtos.WorkstationDto;
+using IndustrialDataProcessor.Contracts.WorkstationDto;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 

@@ -1,4 +1,4 @@
-﻿using IndustrialDataProcessor.Application.Dtos.WorkstationDto;
+﻿using IndustrialDataProcessor.Contracts.WorkstationDto;
 using IndustrialDataProcessor.Domain.Enums;
 using IndustrialDataProcessor.Domain.Workstation.Configs;
 using IndustrialDataProcessor.Domain.Workstation.Configs.ProtocolSub;

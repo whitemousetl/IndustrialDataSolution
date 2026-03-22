@@ -1,5 +1,5 @@
 ﻿using FluentValidation;
-using IndustrialDataProcessor.Application.Dtos.WorkstationDto;
+using IndustrialDataProcessor.Contracts.WorkstationDto;
 
 namespace IndustrialDataProcessor.Application.Validators;
 

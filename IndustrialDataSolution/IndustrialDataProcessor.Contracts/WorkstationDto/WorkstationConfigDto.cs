@@ -1,4 +1,4 @@
-﻿namespace IndustrialDataProcessor.Application.Dtos.WorkstationDto;
+﻿namespace IndustrialDataProcessor.Contracts.WorkstationDto;
 
 /// <summary>
 /// 工作站配置数据传输对象

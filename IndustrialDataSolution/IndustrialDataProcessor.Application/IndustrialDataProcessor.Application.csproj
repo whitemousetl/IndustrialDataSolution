@@ -16,6 +16,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\IndustrialDataProcessor.Contracts\IndustrialDataProcessor.Contracts.csproj" />
     <ProjectReference Include="..\IndustrialDataProcessor.Domain\IndustrialDataProcessor.Domain.csproj" />
   </ItemGroup>
 

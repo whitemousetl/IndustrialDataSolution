@@ -1,5 +1,5 @@
 ﻿using FluentValidation;
-using IndustrialDataProcessor.Application.Dtos.WorkstationDto;
+using IndustrialDataProcessor.Contracts.WorkstationDto;
 using IndustrialDataProcessor.Domain.Enums;
 using IndustrialDataProcessor.Domain.Helpers;
 

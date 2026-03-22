@@ -1,5 +1,4 @@
 ﻿using FluentAssertions;
-using IndustrialDataProcessor.Application.Dtos.WorkstationDto;
 using IndustrialDataProcessor.Domain.Repositories;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;

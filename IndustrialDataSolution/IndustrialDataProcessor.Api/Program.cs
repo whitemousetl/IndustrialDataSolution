@@ -2,6 +2,7 @@ using IndustrialDataProcessor.Api.BackgroundServices;
 using IndustrialDataProcessor.Api.Middleware;
 using IndustrialDataProcessor.Application;
 using IndustrialDataProcessor.Infrastructure;
+using System.Text;
 using System.Text.Json.Serialization;
 
 namespace IndustrialDataProcessor.Api;
@@ -10,6 +11,10 @@ public class Program
 {
     public static void Main(string[] args)
     {
+        // 将控制台编码设置为 UTF-8，尽早执行（在创建 builder 之前）
+        Console.OutputEncoding = Encoding.UTF8;
+        Console.InputEncoding = Encoding.UTF8;
+
         var builder = WebApplication.CreateBuilder(args);
 
         // 注册基础设施层（包含持久化、仓储、基础设施后台服务等）

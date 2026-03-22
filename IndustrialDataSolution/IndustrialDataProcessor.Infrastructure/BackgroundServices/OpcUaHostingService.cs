@@ -136,7 +136,15 @@ public class OpcUaHostingService(
 
             var opcUaServerConfig = await CreateServerConfigurationAsync(_opcUaOptions.Endpoint);
             app.ApplicationConfiguration = opcUaServerConfig;
-            await app.CheckApplicationInstanceCertificatesAsync(false, 0, loopToken);
+            try
+            {
+                await app.CheckApplicationInstanceCertificatesAsync(false, 2048, loopToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[OPC UA] 证书检查/生成失败，请检查 pki/own 目录权限");
+                throw;
+            }
 
             _opcServer = new WorkstationOpcServer(workstationConfig);
 

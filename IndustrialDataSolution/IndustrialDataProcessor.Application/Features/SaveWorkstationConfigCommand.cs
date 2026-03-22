@@ -1,5 +1,5 @@
-using IndustrialDataProcessor.Application.Dtos.WorkstationDto;
 using IndustrialDataProcessor.Application.Mappers;
+using IndustrialDataProcessor.Contracts.WorkstationDto;
 using IndustrialDataProcessor.Domain.Entities;
 using IndustrialDataProcessor.Domain.Repositories;
 using MediatR;

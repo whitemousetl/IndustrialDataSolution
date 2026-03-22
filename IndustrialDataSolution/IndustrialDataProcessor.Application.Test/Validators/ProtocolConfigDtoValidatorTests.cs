@@ -1,6 +1,6 @@
 ﻿using FluentValidation.TestHelper;
-using IndustrialDataProcessor.Application.Dtos.WorkstationDto;
 using IndustrialDataProcessor.Application.Validators;
+using IndustrialDataProcessor.Contracts.WorkstationDto;
 using IndustrialDataProcessor.Domain.Enums;
 using System.IO.Ports;
 

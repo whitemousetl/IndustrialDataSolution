@@ -1,7 +1,7 @@
 using FluentValidation.TestHelper;
-using IndustrialDataProcessor.Application.Dtos.WorkstationDto;
 using IndustrialDataProcessor.Application.Features;
 using IndustrialDataProcessor.Application.Validators;
+using IndustrialDataProcessor.Contracts.WorkstationDto;
 using IndustrialDataProcessor.Domain.Enums;
 
 namespace IndustrialDataProcessor.Application.Tests.Validators;

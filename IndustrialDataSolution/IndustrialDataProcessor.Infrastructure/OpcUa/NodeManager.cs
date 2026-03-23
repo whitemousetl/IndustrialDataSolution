@@ -82,12 +82,12 @@ public class NodeManager : CustomNodeManager2
 
     public void UpdateDataFromCollectionResult(ProtocolResult result)
     {
-        if (!result.ReadIsSuccess) return;// 如果整个协议读失败了，可以选择不更新或更新质量戳为Bad
+        //if (!result.ReadIsSuccess) return;// 如果整个协议读失败了，可以选择不更新或更新质量戳为Bad
 
         lock (Lock) // 加锁保护内部节点状态
         {
             // 级别1: 协议级彻底失败（例如：断网了、连接被服务端踢了，根本没拿到 EquipmentResults）
-            if (!result.ReadIsSuccess)
+            if (result.AllEquipmentsFailed())
             {
                 // 此时直接查找该协议下所有的节点缓存，统一打上通讯失败的质量戳
                 MarkProtocolNodesAsBad(result.ProtocolId, StatusCodes.BadCommunicationError);
@@ -98,7 +98,7 @@ public class NodeManager : CustomNodeManager2
             foreach (var eqResult in result.EquipmentResults)
             {
                 // 设备级失败（例如：由于一根串口线上挂了3个表，只有这一个表断电了不回数据）
-                if (!eqResult.ReadIsSuccess)
+                if (eqResult.AllPointsFailed())
                 {
                     MarkEquipmentNodesAsBad(eqResult.EquipmentId, StatusCodes.BadNotConnected);
                     continue; // 跨过当前设备，继续解析下个正常的设备

@@ -152,7 +152,7 @@ public class HttpApiDriverIntegrationTests : IAsyncDisposable
         foreach (var param in parameters)
         {
             var result = await _driver.ReadAsync(handle, _defaultProtocolConfig, "TEST-EQUIP-001", param, CancellationToken.None);
-            results.Add((result.Label, result.Value, result.ReadIsSuccess));
+            results.Add((result!.Label, result.Value, result.ReadIsSuccess));
         }
 
         // Assert
@@ -226,7 +226,7 @@ public class HttpApiDriverIntegrationTests : IAsyncDisposable
         foreach (var param in parameters)
         {
             var result = await _driver.ReadAsync(handle, _defaultProtocolConfig, "TEST-EQUIP-001", param, CancellationToken.None);
-            if (result.ReadIsSuccess)
+            if (result != null && result.ReadIsSuccess)
                 results[result.Label] = result.Value;
         }
 
@@ -269,8 +269,8 @@ public class HttpApiDriverIntegrationTests : IAsyncDisposable
         var results = await Task.WhenAll(tasks);
 
         // Assert - 所有结果应该成功且值相同
-        results.Should().OnlyContain(r => r.ReadIsSuccess);
-        results.Should().OnlyContain(r => (double)r.Value! == 25.5);
+        results.Should().OnlyContain(r => r!.ReadIsSuccess);
+        results.Should().OnlyContain(r => (double)r!.Value! == 25.5);
     }
 
     [Fact]
@@ -299,7 +299,7 @@ public class HttpApiDriverIntegrationTests : IAsyncDisposable
 
         // Assert
         results.Should().HaveCount(5);
-        results.Should().OnlyContain(r => r.ReadIsSuccess);
+        results.Should().OnlyContain(r => r!.ReadIsSuccess);
     }
 
     #endregion
@@ -392,7 +392,7 @@ public class HttpApiDriverIntegrationTests : IAsyncDisposable
             var result = await _driver.ReadAsync(handle, _defaultProtocolConfig, "TEST-EQUIP-001", config, CancellationToken.None);
             
             // Label是key，Address路径提取的值是这个Label的值
-            if (result.ReadIsSuccess)
+            if (result != null && result.ReadIsSuccess)
             {
                 collectedData[result.Label] = result.Value;
             }
@@ -428,7 +428,7 @@ public class HttpApiDriverIntegrationTests : IAsyncDisposable
         foreach (var config in invalidConfigs)
         {
             var result = await _driver.ReadAsync(handle, _defaultProtocolConfig, "TEST-EQUIP-001", config, CancellationToken.None);
-            results.Add((result.Label, result.ReadIsSuccess, result.ErrorMsg));
+            results.Add((result!.Label, result.ReadIsSuccess, result.ErrorMsg));
         }
 
         // Assert - 无效路径应该返回失败但不抛出异常
@@ -533,8 +533,8 @@ public class HttpApiDriverIntegrationTests : IAsyncDisposable
         var secondResult = await _driver.ReadAsync(handle, _defaultProtocolConfig, "TEST-EQUIP-001", parameter, CancellationToken.None);
 
         // Assert
-        firstResult.ReadIsSuccess.Should().BeFalse();
-        secondResult.ReadIsSuccess.Should().BeTrue();
+        firstResult!.ReadIsSuccess.Should().BeFalse();
+        secondResult!.ReadIsSuccess.Should().BeTrue();
         secondResult.Value.Should().Be(25.5);
     }
 

@@ -142,7 +142,12 @@ public class DataCollectionAppService(
                             try
                             {
                                 pointResult = await driver.ReadAsync(handle, protocol, equipment.Id, point, token);
-                                if (pointResult != null) pointResult.ElapsedMs = swPoint.ElapsedMilliseconds;
+                                if (pointResult != null)
+                                {
+                                    if(!pointResult.ReadIsSuccess) 
+                                        _logger.LogError($"[数据采集] 设备 {equipment.Id} Label {point.Label} 读取失败，信息{pointResult.ErrorMsg}");
+                                    pointResult.ElapsedMs = swPoint.ElapsedMilliseconds;
+                                }
                             }
                             catch (Exception ex) when (ex is not OperationCanceledException)
                             {

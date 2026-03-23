@@ -22,4 +22,9 @@ public class ProtocolResult//协议读取结果
     public string StartTime { get; set; } = string.Empty;//开始时间
     public string EndTime { get; set; } = string.Empty;//结束时间
     public Dictionary<string, object> Metadata { get; set; } = []; // 额外元数据
+
+    public bool AllEquipmentsFailed()
+    {
+        return EquipmentResults.Count > 0 && EquipmentResults.All(e => !e.ReadIsSuccess);
+    }
 }

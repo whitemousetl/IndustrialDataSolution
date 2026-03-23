@@ -14,4 +14,9 @@ public class EquipmentResult // 设备读取结果
     public string StartTime { get; set; } = string.Empty;//开始时间
     public string EndTime { get; set; } = string.Empty;//结束时间
     public Dictionary<string, object> Metadata { get; set; } = []; // 设备额外信息
+
+    public bool AllPointsFailed()
+    {
+        return PointResults.Count > 0 && PointResults.All(p => !p.ReadIsSuccess);
+    }
 }

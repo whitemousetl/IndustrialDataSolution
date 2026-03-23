@@ -5,10 +5,14 @@
   <Folder Name="/src/">
     <Project Path="IndustrialDataProcessor.Api/IndustrialDataProcessor.Api.csproj" />
     <Project Path="IndustrialDataProcessor.Application/IndustrialDataProcessor.Application.csproj" />
-    <Project Path="IndustrialDataProcessor.Contracts/IndustrialDataProcessor.Contracts.csproj" Id="1ca6ca2d-b338-4f54-98e7-8048d90c5e4a" />
+    <Project Path="IndustrialDataProcessor.Contracts/IndustrialDataProcessor.Contracts.csproj" Id="1ca6ca2d-b338-4f54-98e7-8048d90c5e4a">
+      <Build Solution="Debug|*" Project="false" />
+    </Project>
     <Project Path="IndustrialDataProcessor.Domain/IndustrialDataProcessor.Domain.csproj" />
     <Project Path="IndustrialDataProcessor.Infrastructure/IndustrialDataProcessor.Infrastructure.csproj" />
-    <Project Path="IndustrialDataProcessor.WpfClient/IndustrialDataProcessor.WpfClient.csproj" Id="69ad95cd-0be4-4d37-bf19-91cc11c06b45" />
+    <Project Path="IndustrialDataProcessor.WpfClient/IndustrialDataProcessor.WpfClient.csproj" Id="69ad95cd-0be4-4d37-bf19-91cc11c06b45">
+      <Build Solution="Debug|*" Project="false" />
+    </Project>
   </Folder>
   <Folder Name="/tests/">
     <Project Path="IndustrialDataProcessor.Api.Tests/IndustrialDataProcessor.Api.Tests.csproj" Id="346a4097-f1d7-4834-a0b9-7392e9afd2e7" />

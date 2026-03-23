@@ -165,7 +165,7 @@ public class HttpApiDriverTests : IDisposable
         var result = await _driver.ReadAsync(handle, _defaultProtocolConfig, "TEST-EQUIP-001", parameter, CancellationToken.None);
 
         // Assert
-        result.ReadIsSuccess.Should().BeTrue();
+        result!.ReadIsSuccess.Should().BeTrue();
         result.Value.Should().Be("online");
     }
 
@@ -181,7 +181,7 @@ public class HttpApiDriverTests : IDisposable
         var result = await _driver.ReadAsync(handle, _defaultProtocolConfig, "TEST-EQUIP-001", parameter, CancellationToken.None);
 
         // Assert
-        result.ReadIsSuccess.Should().BeTrue();
+        result!.ReadIsSuccess.Should().BeTrue();
         result.Value.Should().Be(0);
     }
 
@@ -197,7 +197,7 @@ public class HttpApiDriverTests : IDisposable
         var result = await _driver.ReadAsync(handle, _defaultProtocolConfig, "TEST-EQUIP-001", parameter, CancellationToken.None);
 
         // Assert
-        result.ReadIsSuccess.Should().BeTrue();
+        result!.ReadIsSuccess.Should().BeTrue();
         result.Value.Should().Be(true);
     }
 
@@ -213,7 +213,7 @@ public class HttpApiDriverTests : IDisposable
         var result = await _driver.ReadAsync(handle, _defaultProtocolConfig, "TEST-EQUIP-001", parameter, CancellationToken.None);
 
         // Assert
-        result.ReadIsSuccess.Should().BeTrue();
+        result!.ReadIsSuccess.Should().BeTrue();
         result.Value.Should().Be(23.5);
     }
 
@@ -229,7 +229,7 @@ public class HttpApiDriverTests : IDisposable
         var result = await _driver.ReadAsync(handle, _defaultProtocolConfig, "TEST-EQUIP-001", parameter, CancellationToken.None);
 
         // Assert
-        result.ReadIsSuccess.Should().BeTrue();
+        result!.ReadIsSuccess.Should().BeTrue();
         result.Value.Should().Be("temp2");
     }
 
@@ -249,7 +249,7 @@ public class HttpApiDriverTests : IDisposable
         var result = await _driver.ReadAsync(handle, _defaultProtocolConfig, "TEST-EQUIP-001", parameter, CancellationToken.None);
 
         // Assert
-        result.ReadIsSuccess.Should().BeFalse();
+        result!.ReadIsSuccess.Should().BeFalse();
         result.ErrorMsg.Should().Contain("无法从JSON中提取路径");
     }
 
@@ -265,7 +265,7 @@ public class HttpApiDriverTests : IDisposable
         var result = await _driver.ReadAsync(handle, _defaultProtocolConfig, "TEST-EQUIP-001", parameter, CancellationToken.None);
 
         // Assert
-        result.ReadIsSuccess.Should().BeFalse();
+        result!.ReadIsSuccess.Should().BeFalse();
     }
 
     #endregion
@@ -284,7 +284,7 @@ public class HttpApiDriverTests : IDisposable
         var result = await _driver.ReadAsync(handle, _defaultProtocolConfig, "TEST-EQUIP-001", parameter, CancellationToken.None);
 
         // Assert
-        result.ReadIsSuccess.Should().BeTrue();
+        result!.ReadIsSuccess.Should().BeTrue();
         _mockHandler.Protected().Verify(
             "SendAsync",
             Times.Once(),
@@ -304,7 +304,7 @@ public class HttpApiDriverTests : IDisposable
         var result = await _driver.ReadAsync(handle, _defaultProtocolConfig, "TEST-EQUIP-001", parameter, CancellationToken.None);
 
         // Assert
-        result.ReadIsSuccess.Should().BeTrue();
+        result!.ReadIsSuccess.Should().BeTrue();
         _mockHandler.Protected().Verify(
             "SendAsync",
             Times.Once(),
@@ -324,7 +324,7 @@ public class HttpApiDriverTests : IDisposable
         var result = await _driver.ReadAsync(handle, _defaultProtocolConfig, "TEST-EQUIP-001", parameter, CancellationToken.None);
 
         // Assert
-        result.ReadIsSuccess.Should().BeTrue();
+        result!.ReadIsSuccess.Should().BeTrue();
         _mockHandler.Protected().Verify(
             "SendAsync",
             Times.Once(),
@@ -344,7 +344,7 @@ public class HttpApiDriverTests : IDisposable
         var result = await _driver.ReadAsync(handle, _defaultProtocolConfig, "TEST-EQUIP-001", parameter, CancellationToken.None);
 
         // Assert
-        result.ReadIsSuccess.Should().BeTrue();
+        result!.ReadIsSuccess.Should().BeTrue();
         _mockHandler.Protected().Verify(
             "SendAsync",
             Times.Once(),
@@ -389,9 +389,9 @@ public class HttpApiDriverTests : IDisposable
 
         // Assert - 由于缓存，HTTP请求只应发送一次
         callCount.Should().Be(1);
-        result1.Value.Should().Be(25.5);
-        result2.Value.Should().Be(101.325);
-        result3.Value.Should().Be(65);
+        result1!.Value.Should().Be(25.5);
+        result2!.Value.Should().Be(101.325);
+        result3!.Value.Should().Be(65);
     }
 
     [Fact]
@@ -471,7 +471,7 @@ public class HttpApiDriverTests : IDisposable
         var result = await _driver.ReadAsync(handle, _defaultProtocolConfig, "TEST-EQUIP-001", parameter, CancellationToken.None);
 
         // Assert
-        result.ReadIsSuccess.Should().BeFalse();
+        result!.ReadIsSuccess.Should().BeFalse();
         result.ErrorMsg.Should().Contain("HTTP请求失败");
     }
 
@@ -487,7 +487,7 @@ public class HttpApiDriverTests : IDisposable
         var result = await _driver.ReadAsync(handle, _defaultProtocolConfig, "TEST-EQUIP-001", parameter, CancellationToken.None);
 
         // Assert
-        result.ReadIsSuccess.Should().BeFalse();
+        result!.ReadIsSuccess.Should().BeFalse();
         result.ErrorMsg.Should().Contain("API返回空响应");
     }
 
@@ -503,7 +503,7 @@ public class HttpApiDriverTests : IDisposable
         var result = await _driver.ReadAsync(handle, _defaultProtocolConfig, "TEST-EQUIP-001", parameter, CancellationToken.None);
 
         // Assert
-        result.ReadIsSuccess.Should().BeFalse();
+        result!.ReadIsSuccess.Should().BeFalse();
     }
 
     [Fact]

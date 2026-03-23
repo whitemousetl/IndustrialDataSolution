@@ -5,5 +5,5 @@
 /// </summary>
 public interface IConfigSaveable
 {
-    void SaveConfig();
+    Task SaveConfig();
 }

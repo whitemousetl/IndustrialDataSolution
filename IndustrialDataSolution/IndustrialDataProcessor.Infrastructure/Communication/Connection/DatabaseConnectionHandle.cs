@@ -15,8 +15,9 @@ public class DatabaseConnectionHandle : IConnectionHandle
     private readonly ISqlSugarClient _client;
     private readonly SemaphoreSlim _semaphore = new(1, 1);
 
-    // 缓存连接句柄级别，不同协议配置实例间正常隔离，解决单例驱动共享时的缓存键冲突问题
-    private readonly ConcurrentDictionary<string, RowCacheEntry> _rowCache = new();
+    // 缓存属于连接句柄级别，不同协议配置实例间完全隔离
+    // 以 SQL 字符串为键，缓存该 SQL 查询的完整结果集（所有行），支持单行和多行查询
+    private readonly ConcurrentDictionary<string, TableCacheEntry> _tableCache = new();
     private const int DefaultCacheExpiryMs = 1000;
 
     /// <summary>
@@ -46,38 +47,45 @@ public class DatabaseConnectionHandle : IConnectionHandle
     }
 
     /// <summary>
-    /// 执行 SQL 查询并缓存首行结果（缓存有效期内不重复查库）
+    /// 执行 SQL 查询并缓存完整结果集（缓存有效期内不重复查库）
+    /// 同时支持单行查询和多行查询（例如：一条 SQL 返回多台设备的数据）
     /// 缓存属于此连接句柄，不同协议配置的缓存完全独立
     /// </summary>
-    public async Task<Dictionary<string, object?>?> GetOrExecuteQueryAsync(string sql)
+    /// <returns>所有行的列表，每行是「列名→值」字典；SQL 无数据时返回 null</returns>
+    public async Task<List<Dictionary<string, object?>>?> GetAllRowsAsync(string sql)
     {
-        if (_rowCache.TryGetValue(sql, out var cached) && !cached.IsExpired)
-            return cached.Row;
+        if (_tableCache.TryGetValue(sql, out var cached) && !cached.IsExpired)
+            return cached.Rows;
 
         var dataTable = await _client.Ado.GetDataTableAsync(sql);
 
         if (dataTable.Rows.Count == 0)
         {
-            _rowCache[sql] = RowCacheEntry.Empty(DefaultCacheExpiryMs);
+            _tableCache[sql] = TableCacheEntry.Empty(DefaultCacheExpiryMs);
             return null;
         }
 
-        var row = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
-        foreach (DataColumn col in dataTable.Columns)
+        var rows = new List<Dictionary<string, object?>>(dataTable.Rows.Count);
+        foreach (DataRow dataRow in dataTable.Rows)
         {
-            var rawValue = dataTable.Rows[0][col];
-            row[col.ColumnName] = rawValue == DBNull.Value ? null : rawValue;
+            var row = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+            foreach (DataColumn col in dataTable.Columns)
+            {
+                var rawValue = dataRow[col];
+                row[col.ColumnName] = rawValue == DBNull.Value ? null : rawValue;
+            }
+            rows.Add(row);
         }
 
-        _rowCache[sql] = RowCacheEntry.WithRow(row, DefaultCacheExpiryMs);
-        return row;
+        _tableCache[sql] = TableCacheEntry.WithRows(rows, DefaultCacheExpiryMs);
+        return rows;
     }
 
     public ValueTask DisposeAsync()
     {
         _client.Dispose();
         _semaphore.Dispose();
-        _rowCache.Clear();
+        _tableCache.Clear();
         return ValueTask.CompletedTask;
     }
 
@@ -87,18 +95,18 @@ public class DatabaseConnectionHandle : IConnectionHandle
         public void Dispose() => _semaphore.Release();
     }
 
-    private sealed class RowCacheEntry
+    private sealed class TableCacheEntry
     {
-        public Dictionary<string, object?>? Row { get; private init; }
+        public List<Dictionary<string, object?>>? Rows { get; private init; }
         public DateTime ExpiryTime { get; private init; }
         public bool IsExpired => DateTime.UtcNow > ExpiryTime;
 
-        private RowCacheEntry() { }
+        private TableCacheEntry() { }
 
-        public static RowCacheEntry WithRow(Dictionary<string, object?> row, int expiryMs) =>
-            new() { Row = row, ExpiryTime = DateTime.UtcNow.AddMilliseconds(expiryMs) };
+        public static TableCacheEntry WithRows(List<Dictionary<string, object?>> rows, int expiryMs) =>
+            new() { Rows = rows, ExpiryTime = DateTime.UtcNow.AddMilliseconds(expiryMs) };
 
-        public static RowCacheEntry Empty(int expiryMs) =>
-            new() { Row = null, ExpiryTime = DateTime.UtcNow.AddMilliseconds(expiryMs) };
+        public static TableCacheEntry Empty(int expiryMs) =>
+            new() { Rows = null, ExpiryTime = DateTime.UtcNow.AddMilliseconds(expiryMs) };
     }
 }

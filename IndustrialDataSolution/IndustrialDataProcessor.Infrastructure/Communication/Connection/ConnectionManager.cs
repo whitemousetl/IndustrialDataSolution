@@ -419,20 +419,35 @@ public class ConnectionManager : IConnectionManager, IAsyncDisposable
     }
 
     /// <summary>
-    /// 处理数据库协议连接（当前支持 MySQL）
+    /// 处理数据库协议连接（支持 MySQL 和 SQLite）
     /// 连接字符串优先使用 DatabaseConnectString；
-    /// 若未填写则从 IpAddress / ProtocolPort / DatabaseName / Account / Password 组装
+    /// 若未填写，MySQL 从 IpAddress/ProtocolPort/DatabaseName/Account/Password 组装，SQLite 则以 DatabaseName 为文件路径
     /// </summary>
     private static IConnectionHandle CreateDatabaseConnection(DatabaseInterfaceConfig dbConfig)
     {
-        var connectionString = dbConfig.DatabaseConnectString;
+        DbType dbType;
+        string connectionString;
 
-        if (string.IsNullOrWhiteSpace(connectionString))
+        if (dbConfig.ProtocolType == ProtocolType.SQLite)
         {
-            connectionString =
-                $"Server={dbConfig.IpAddress};Port={dbConfig.ProtocolPort};" +
-                $"Database={dbConfig.DatabaseName};" +
-                $"Uid={dbConfig.Account};Pwd={dbConfig.Password};";
+            // SQLite 使用 DbType.Sqlite（Microsoft.Data.Sqlite），连接字符串格式为文件路径
+            dbType = DbType.Sqlite;
+            connectionString = dbConfig.DatabaseConnectString;
+            if (string.IsNullOrWhiteSpace(connectionString))
+                connectionString = $"Data Source={dbConfig.DatabaseName}";
+        }
+        else
+        {
+            // MySQL（默认）
+            dbType = DbType.MySql;
+            connectionString = dbConfig.DatabaseConnectString;
+            if (string.IsNullOrWhiteSpace(connectionString))
+            {
+                connectionString =
+                    $"Server={dbConfig.IpAddress};Port={dbConfig.ProtocolPort};" +
+                    $"Database={dbConfig.DatabaseName};" +
+                    $"Uid={dbConfig.Account};Pwd={dbConfig.Password};";
+            }
         }
 
         // SqlSugarScope 是线程安全的（内部按线程创建独立上下文），适合单例/共享场景
@@ -440,7 +455,7 @@ public class ConnectionManager : IConnectionManager, IAsyncDisposable
         var db = new SqlSugarScope(new ConnectionConfig
         {
             ConnectionString = connectionString,
-            DbType = DbType.MySql,
+            DbType = dbType,
             IsAutoCloseConnection = true
         });
 

@@ -17,6 +17,7 @@
     <PackageReference Include="OPCFoundation.NetStandard.Opc.Ua" Version="1.5.378.106" />
     <PackageReference Include="OPCFoundation.NetStandard.Opc.Ua.Client" Version="1.5.378.106" />
     <PackageReference Include="OPCFoundation.NetStandard.Opc.Ua.Server" Version="1.5.378.106" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.0" />
     <PackageReference Include="SqlSugarCore" Version="5.1.4.214" />
   </ItemGroup>
 

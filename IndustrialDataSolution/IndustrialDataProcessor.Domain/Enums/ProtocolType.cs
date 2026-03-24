@@ -227,5 +227,13 @@ public enum ProtocolType
     [ProtocolInterfaceType(InterfaceType.DATABASE)]
     [ProtocolValidateParameter(requireStationNo: false, requireDataFormat: false, requireDataType: false, requireAddressStartWithZero: false, requireInstrumentType: false)]
     MySQL = 300,
+
+    /// <summary>
+    /// SQLite
+    /// </summary>
+    [Description("SQLite")]
+    [ProtocolInterfaceType(InterfaceType.DATABASE)]
+    [ProtocolValidateParameter(requireStationNo: false, requireDataFormat: false, requireDataType: false, requireAddressStartWithZero: false, requireInstrumentType: false)]
+    SQLite = 301,
     #endregion
 }

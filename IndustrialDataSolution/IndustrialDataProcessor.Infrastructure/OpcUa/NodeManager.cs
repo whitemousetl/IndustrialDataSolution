@@ -181,8 +181,8 @@ public class NodeManager : CustomNodeManager2
 
             // 状态码设为 Good，表示数据有效
             variable.StatusCode = statusCode;
-            // 更新时间戳为当前 UTC 时间
-            variable.Timestamp = DateTime.UtcNow;
+            // 更新时间戳为本地时间（SourceTimestamp）
+            variable.Timestamp = DateTime.Now;
 
             // 关键：清除变更掩码并触发订阅通知
             variable.ClearChangeMasks(SystemContext, false);

@@ -49,8 +49,11 @@ public class Program
                 }
 
                 // 统一日志输出模板
+                //const string OutputTemplate =
+                //    "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff} {Level:u3}] [{SourceContext:l}] [T{ThreadId}] {Message:lj}{NewLine}{Exception}";
+
                 const string OutputTemplate =
-                    "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff} {Level:u3}] [{SourceContext:l}] [T{ThreadId}] {Message:lj}{NewLine}{Exception}";
+                   "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff} {Level:u3}] [{SourceContext:l}] {Message:lj}{NewLine}{Exception}";
 
                 cfg
                     // 从 appsettings.json / appsettings.{Env}.json 的 "Serilog" 节读取最低级别配置

@@ -6,7 +6,6 @@ using IndustrialDataProcessor.Domain.Enums;
 using IndustrialDataProcessor.Domain.Workstation.Configs;
 using IndustrialDataProcessor.Domain.Workstation.Results;
 using IndustrialDataProcessor.Infrastructure.Communication.Connection;
-using IndustrialDataProcessor.Infrastructure.Communication.Drivers.TcpCommon;
 using IndustrialDataProcessor.Infrastructure.Communication.Extensions;
 
 namespace IndustrialDataProcessor.Infrastructure.Communication.Drivers.Api;

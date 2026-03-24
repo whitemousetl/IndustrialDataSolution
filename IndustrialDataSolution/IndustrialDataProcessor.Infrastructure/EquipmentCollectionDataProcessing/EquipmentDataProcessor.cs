@@ -131,10 +131,10 @@ public class EquipmentDataProcessor : IEquipmentDataProcessor
             eq.SuccessPoints = eq.PointResults.Count(p => p.ReadIsSuccess);
             eq.FailedPoints = eq.PointResults.Count(p => !p.ReadIsSuccess);
 
-            bool isFullyProcessed = (eq.SuccessPoints + eq.FailedPoints) == eq.TotalPoints;
+            bool isFullyProcessed = eq.FailedPoints != eq.TotalPoints;
 
             // 设备的成功与否，完全剥离 AppService，在这里做最终宣判
-            eq.ReadIsSuccess = eq.TotalPoints > 0 && isFullyProcessed && eq.FailedPoints == 0;
+            eq.ReadIsSuccess = eq.TotalPoints > 0 && isFullyProcessed;
 
             if (!eq.ReadIsSuccess && string.IsNullOrEmpty(eq.ErrorMsg))
             {
@@ -151,6 +151,6 @@ public class EquipmentDataProcessor : IEquipmentDataProcessor
         }
 
         // 协议级状态最后落锤
-        protocolResult.ReadIsSuccess = protocolResult.FailedEquipments == 0;
+        protocolResult.ReadIsSuccess = protocolResult.FailedEquipments != protocolResult.TotalPoints;
     }
 }

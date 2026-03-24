@@ -206,6 +206,9 @@ public class OpcUaHostingService(
 
     private static async Task<ApplicationConfiguration> CreateServerConfigurationAsync(string endpoint)
     {
+        // 以运行目录为基准
+        var baseDir = AppContext.BaseDirectory;
+
         var config = new ApplicationConfiguration()
         {
             ApplicationName = "WorkstationOpcServer",
@@ -213,10 +216,10 @@ public class OpcUaHostingService(
             ApplicationType = ApplicationType.Server,
             SecurityConfiguration = new SecurityConfiguration
             {
-                ApplicationCertificate = new CertificateIdentifier { StoreType = "Directory", StorePath = "pki/own", SubjectName = "CN=WorkstationOpcServer" },
-                TrustedPeerCertificates = new CertificateTrustList { StoreType = "Directory", StorePath = "pki/trusted" },
-                TrustedIssuerCertificates = new CertificateTrustList { StoreType = "Directory", StorePath = "pki/issuers" },
-                RejectedCertificateStore = new CertificateTrustList { StoreType = "Directory", StorePath = "pki/rejected" },
+                ApplicationCertificate = new CertificateIdentifier { StoreType = "Directory", StorePath = Path.Combine(baseDir, "pki", "own"), SubjectName = "CN=WorkstationOpcServer" },
+                TrustedPeerCertificates = new CertificateTrustList { StoreType = "Directory", StorePath = Path.Combine(baseDir, "pki", "trusted") },
+                TrustedIssuerCertificates = new CertificateTrustList { StoreType = "Directory", StorePath = Path.Combine(baseDir, "pki", "issuers") },
+                RejectedCertificateStore = new CertificateTrustList { StoreType = "Directory", StorePath = Path.Combine(baseDir, "pki", "rejected") },
                 AutoAcceptUntrustedCertificates = true,
                 AddAppCertToTrustedStore = true
             },

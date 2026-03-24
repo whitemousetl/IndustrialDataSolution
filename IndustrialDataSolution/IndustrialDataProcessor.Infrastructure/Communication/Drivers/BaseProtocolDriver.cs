@@ -3,7 +3,7 @@ using IndustrialDataProcessor.Domain.Workstation;
 using IndustrialDataProcessor.Domain.Workstation.Configs;
 using IndustrialDataProcessor.Domain.Workstation.Results;
 
-namespace IndustrialDataProcessor.Infrastructure.Communication.Drivers.TcpCommon;
+namespace IndustrialDataProcessor.Infrastructure.Communication.Drivers;
 
 /// <summary>
 /// 协议驱动的抽象基类，提供通用的连接保障、异常捕获和读写流程编排（模板方法模式）

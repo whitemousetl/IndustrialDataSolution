@@ -1,7 +1,6 @@
 ﻿using IndustrialDataProcessor.Domain.Communication.IConnection;
 using IndustrialDataProcessor.Domain.Workstation.Configs;
 using IndustrialDataProcessor.Domain.Workstation.Results;
-using IndustrialDataProcessor.Infrastructure.Communication.Drivers.TcpCommon;
 using Opc.Ua.Client;
 
 namespace IndustrialDataProcessor.Infrastructure.Communication.Drivers.TcpSpecial;

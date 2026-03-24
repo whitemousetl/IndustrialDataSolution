@@ -14,6 +14,7 @@ using lib60870.CS104;
 using Opc.Ua;
 using Opc.Ua.Client;
 using Opc.Ua.Configuration;
+using SqlSugar;
 using System.Collections.Concurrent;
 using System.Data.Common;
 using System.Net.Http.Headers;
@@ -55,6 +56,11 @@ public class ConnectionManager : IConnectionManager, IAsyncDisposable
         {
             // API 接口
             return await CreateApiConnectionAsync(apiConfig, token);
+        }
+        else if (config is DatabaseInterfaceConfig dbConfig)
+        {
+            // DATABASE 接口
+            return CreateDatabaseConnection(dbConfig);
         }
         else
         {
@@ -410,6 +416,35 @@ public class ConnectionManager : IConnectionManager, IAsyncDisposable
         );
 
         return Task.FromResult<IConnectionHandle>(handle);
+    }
+
+    /// <summary>
+    /// 处理数据库协议连接（当前支持 MySQL）
+    /// 连接字符串优先使用 DatabaseConnectString；
+    /// 若未填写则从 IpAddress / ProtocolPort / DatabaseName / Account / Password 组装
+    /// </summary>
+    private static IConnectionHandle CreateDatabaseConnection(DatabaseInterfaceConfig dbConfig)
+    {
+        var connectionString = dbConfig.DatabaseConnectString;
+
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            connectionString =
+                $"Server={dbConfig.IpAddress};Port={dbConfig.ProtocolPort};" +
+                $"Database={dbConfig.DatabaseName};" +
+                $"Uid={dbConfig.Account};Pwd={dbConfig.Password};";
+        }
+
+        // SqlSugarScope 是线程安全的（内部按线程创建独立上下文），适合单例/共享场景
+        // SqlSugarClient 不是线程安全的，即使有 SemaphoreSlim 串行化也存在内部状态风险
+        var db = new SqlSugarScope(new ConnectionConfig
+        {
+            ConnectionString = connectionString,
+            DbType = DbType.MySql,
+            IsAutoCloseConnection = true
+        });
+
+        return new DatabaseConnectionHandle(db, dbConfig.QuerySqlString ?? string.Empty);
     }
 
     public async Task ClearAllConnectionsAsync()

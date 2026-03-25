@@ -101,7 +101,7 @@ public class ConnectionManager : IConnectionManager, IAsyncDisposable
                     return new DefaultConnectionHandle(rawConn);
                 }
 
-            case ProtocolType.OmronFinsTcp:
+            case ProtocolType.OmronFinsNet:
                 {
                     var rawConn = new OmronFinsNet(netConfig.IpAddress, netConfig.ProtocolPort)
                     {

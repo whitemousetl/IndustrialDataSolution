@@ -28,10 +28,10 @@ public enum ProtocolType
     /// <summary>
     /// OmronFinsNet
     /// </summary>
-    [Description("OmronFinsTcp")]
+    [Description("OmronFinsNet")]
     [ProtocolInterfaceType(InterfaceType.LAN)]
     [ProtocolValidateParameter(requireStationNo: false, requireDataFormat: false, requireDataType: true, requireAddressStartWithZero: false, requireInstrumentType: false)]
-    OmronFinsTcp = 2,
+    OmronFinsNet = 2,
 
     /// <summary>
     /// OmronCipNet

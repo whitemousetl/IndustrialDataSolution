@@ -6,7 +6,7 @@ using IndustrialDataProcessor.Infrastructure.Communication.Extensions;
 
 namespace IndustrialDataProcessor.Infrastructure.Communication.Drivers.TcpCommon;
 
-public class OmronFinsTcpDriver : BaseProtocolDriver<OmronFinsNet>
+public class OmronFinsNetDriver : BaseProtocolDriver<OmronFinsNet>
 {
     protected override async Task<PointResult> ReadPointCoreAsync(IConnectionHandle handle, ParameterConfig point, CancellationToken token)
     {

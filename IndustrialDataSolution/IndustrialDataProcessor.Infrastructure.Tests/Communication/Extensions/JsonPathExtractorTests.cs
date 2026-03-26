@@ -423,6 +423,206 @@ public class JsonPathExtractorTests
 
     #endregion
 
+    #region 条件筛选取值测试（根数组场景）
+
+    /// <summary>
+    /// 根级数组 JSON，用于测试条件筛选功能
+    /// 模拟上一轮需求：API 直接返回 StationDetails 数组
+    /// </summary>
+    private const string RootArrayJson = """
+        [
+            {"StationCode": 0, "StationName": "Machine",   "Detail": "CurrentOperationOrderRowId", "Value": "0"},
+            {"StationCode": 1, "StationName": "In station", "Detail": "CurrentOperationOrderRowId", "Value": "0"},
+            {"StationCode": 20,"StationName": "Line 1",    "Detail": "ChangeProfileStatus",        "Value": "2"},
+            {"StationCode": 0, "StationName": "Machine",   "Detail": "CurrentStationStatus",       "Value": "1008"},
+            {"StationCode": 0, "StationName": "Machine",   "Detail": "Uptime",                     "Value": "False"}
+        ]
+        """;
+
+    [Fact]
+    public void ExtractValue_RootArray_SingleCondition_ReturnsCorrectValue()
+    {
+        // Arrange & Act - 单条件筛选
+        var result = JsonPathExtractor.ExtractValue(RootArrayJson, "[?Detail=Uptime].Value");
+
+        // Assert
+        result.Should().Be("False");
+    }
+
+    [Fact]
+    public void ExtractValue_RootArray_MultipleConditions_ReturnsCorrectValue()
+    {
+        // Arrange & Act - 三条件组合筛选（包含含空格的值 "Line 1"）
+        var result = JsonPathExtractor.ExtractValue(
+            RootArrayJson,
+            "[?StationCode=20&StationName=Line 1&Detail=ChangeProfileStatus].Value");
+
+        // Assert
+        result.Should().Be("2");
+    }
+
+    [Fact]
+    public void ExtractValue_RootArray_NumericCondition_ReturnsCorrectValue()
+    {
+        // Arrange & Act - 数字条件（JSON中是数字类型，条件值是字符串，应能匹配）
+        var result = JsonPathExtractor.ExtractValue(
+            RootArrayJson,
+            "[?StationCode=0&Detail=CurrentStationStatus].Value");
+
+        // Assert
+        result.Should().Be("1008");
+    }
+
+    [Fact]
+    public void ExtractValue_RootArray_ConditionNoMatch_ReturnsNull()
+    {
+        // Arrange & Act - 条件不匹配任何元素
+        var result = JsonPathExtractor.ExtractValue(
+            RootArrayJson,
+            "[?StationCode=99&Detail=NonExistent].Value");
+
+        // Assert
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public void ExtractValue_RootArray_ConditionMatchesButFieldMissing_ReturnsNull()
+    {
+        // Arrange & Act - 条件匹配但目标字段不存在
+        var result = JsonPathExtractor.ExtractValue(
+            RootArrayJson,
+            "[?StationCode=20&Detail=ChangeProfileStatus].NonExistentField");
+
+        // Assert
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public void ExtractValue_RootArray_CaseInsensitiveConditionKey_ReturnsCorrectValue()
+    {
+        // Arrange & Act - 条件键大小写不敏感
+        var result = JsonPathExtractor.ExtractValue(
+            RootArrayJson,
+            "[?detail=Uptime].Value");
+
+        // Assert
+        result.Should().Be("False");
+    }
+
+    #endregion
+
+    #region 条件筛选取值测试（嵌套对象场景）
+
+    /// <summary>
+    /// 嵌套对象 JSON，模拟 Document.Body.StationDetails 结构
+    /// </summary>
+    private const string NestedDocumentJson = """
+        {
+            "Document": {
+                "Header": {
+                    "Sender": "PrimeConnector",
+                    "Receiver": "ERP",
+                    "MessageID": "450205c7-5a63-4c38-a971-cd5738b74aae"
+                },
+                "Body": {
+                    "StationDetails": [
+                        {"StationCode": 0,  "StationName": "Machine",  "Detail": "CurrentOperationOrderRowId", "Value": "0"},
+                        {"StationCode": 1,  "StationName": "In station","Detail": "CurrentOperationOrderRowId", "Value": "5"},
+                        {"StationCode": 20, "StationName": "Line 1",   "Detail": "ChangeProfileStatus",        "Value": "2"},
+                        {"StationCode": 21, "StationName": "Line 2",   "Detail": "ChangeProfileStatus",        "Value": "3"},
+                        {"StationCode": 0,  "StationName": "Machine",  "Detail": "Uptime",                     "Value": "True"}
+                    ]
+                }
+            }
+        }
+        """;
+
+    [Fact]
+    public void ExtractValue_NestedDocument_ConditionalOnNestedArray_ReturnsCorrectValue()
+    {
+        // Arrange & Act - 嵌套路径 + 条件筛选（3个条件，含空格值）
+        var result = JsonPathExtractor.ExtractValue(
+            NestedDocumentJson,
+            "Document.Body.StationDetails.[?StationCode=20&StationName=Line 1&Detail=ChangeProfileStatus].Value");
+
+        // Assert
+        result.Should().Be("2");
+    }
+
+    [Fact]
+    public void ExtractValue_NestedDocument_DifferentRowSameConditionKey_ReturnsCorrectRow()
+    {
+        // Arrange & Act - Line 1 和 Line 2 同样有 ChangeProfileStatus，验证 StationCode 条件能区分
+        var line2Value = JsonPathExtractor.ExtractValue(
+            NestedDocumentJson,
+            "Document.Body.StationDetails.[?StationCode=21&StationName=Line 2&Detail=ChangeProfileStatus].Value");
+
+        // Assert
+        line2Value.Should().Be("3");
+    }
+
+    [Fact]
+    public void ExtractValue_NestedDocument_SingleConditionOnNestedArray_ReturnsCorrectValue()
+    {
+        // Arrange & Act - 只用一个条件（Detail=Uptime 在整个数组中唯一）
+        var result = JsonPathExtractor.ExtractValue(
+            NestedDocumentJson,
+            "Document.Body.StationDetails.[?Detail=Uptime].Value");
+
+        // Assert
+        result.Should().Be("True");
+    }
+
+    [Fact]
+    public void ExtractValue_NestedDocument_HeaderProperty_WithPositionMode_ReturnsCorrectValue()
+    {
+        // Arrange & Act - 验证同一 JSON 中位置取值（嵌套对象属性）仍然正常工作
+        var sender = JsonPathExtractor.ExtractValue(NestedDocumentJson, "Document.Header.Sender");
+        var messageId = JsonPathExtractor.ExtractValue(NestedDocumentJson, "Document.Header.MessageID");
+
+        // Assert
+        sender.Should().Be("PrimeConnector");
+        messageId.Should().Be("450205c7-5a63-4c38-a971-cd5738b74aae");
+    }
+
+    [Fact]
+    public void ExtractValue_NestedDocument_PositionAccessOnNestedArray_ReturnsCorrectValue()
+    {
+        // Arrange & Act - 嵌套数组中使用下标取值（位置模式）
+        var result = JsonPathExtractor.ExtractValue(
+            NestedDocumentJson,
+            "Document.Body.StationDetails[2].Value");
+
+        // Assert - 下标 2 对应 Line 1 的 ChangeProfileStatus
+        result.Should().Be("2");
+    }
+
+    [Fact]
+    public void ExtractValue_NestedDocument_ConditionNoMatch_ReturnsNull()
+    {
+        // Arrange & Act - 嵌套路径下条件不匹配
+        var result = JsonPathExtractor.ExtractValue(
+            NestedDocumentJson,
+            "Document.Body.StationDetails.[?StationCode=99].Value");
+
+        // Assert
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public void ExtractValue_NestedDocument_ConditionalOnNonArray_ReturnsNull()
+    {
+        // Arrange & Act - 对非数组节点使用条件筛选，应返回 null
+        var result = JsonPathExtractor.ExtractValue(
+            NestedDocumentJson,
+            "Document.Header.[?Sender=PrimeConnector].Receiver");
+
+        // Assert
+        result.Should().BeNull();
+    }
+
+    #endregion
+
     #region 工业数据采集场景测试
 
     [Fact]

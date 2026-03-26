@@ -184,6 +184,8 @@ public class NodeManager : CustomNodeManager2
             // 更新时间戳为本地时间（SourceTimestamp）
             variable.Timestamp = DateTime.Now;
 
+            //variable.Description = new LocalizedText("zh-CN", "测试的采集点状态");
+
             // 关键：清除变更掩码并触发订阅通知
             variable.ClearChangeMasks(SystemContext, false);
         }

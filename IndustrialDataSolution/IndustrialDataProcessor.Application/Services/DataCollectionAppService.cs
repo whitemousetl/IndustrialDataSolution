@@ -195,6 +195,10 @@ public class DataCollectionAppService(
 
                 _logger.LogError(ex, "[数据采集] 协议 [{ProtocolId}] 采集周期发生异常，将在 {DelayMs}ms 后重试",
                     protocol.Id, protocol.CommunicationDelay);
+
+                // 连接级异常发生时，主动将已缓存的连接删除并关闭
+                // 避免下次重试时复用已断开的僵尸连接，导致 PLC 设备的连接槽泭將1被占满
+                await _connectionManager.InvalidateConnectionAsync(protocol.Id);
             }
             finally
             {

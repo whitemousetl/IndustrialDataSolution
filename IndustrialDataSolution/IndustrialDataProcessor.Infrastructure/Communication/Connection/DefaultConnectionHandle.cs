@@ -20,14 +20,20 @@ public class DefaultConnectionHandle : IConnectionHandle
 
     public async ValueTask DisposeAsync()
     {
-        // 释放底层 HSL 连接
-        if (_rawConnection is IReadWriteNet net)
+        if (_rawConnection != null)
         {
-            //net.ConnectClose();
-        }
-        else if (_rawConnection is IDisposable disposable)
-        {
-            disposable.Dispose();
+            // HSL 的网络通信类（OmronFinsNet 等）在 NetworkDoubleBase 上定义了 ConnectClose，
+            // 但该方法不在 IReadWriteNet 接口上。
+            // 用反射调用可防止编译失败，同时确保 TCP 连接被正确关闭并释放设备端连接槽
+            var closeMethod = _rawConnection.GetType().GetMethod("ConnectClose", Type.EmptyTypes);
+            if (closeMethod != null)
+            {
+                try { closeMethod.Invoke(_rawConnection, null); } catch { /* 忽略关闭时的异常，避免掩盖主要错误 */ }
+            }
+            else if (_rawConnection is IDisposable disposable)
+            {
+                disposable.Dispose();
+            }
         }
 
         _semaphore.Dispose();

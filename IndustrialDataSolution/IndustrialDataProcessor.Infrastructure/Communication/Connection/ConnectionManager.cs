@@ -26,17 +26,35 @@ public class ConnectionManager : IConnectionManager, IAsyncDisposable
 {
     private readonly ConcurrentDictionary<string, IConnectionHandle> _connections = [];
 
+    // 每个协议 Id 对应一把锁，防止并发下重复建立连接（双重检查锁定模式）
+    private readonly ConcurrentDictionary<string, SemaphoreSlim> _keyLocks = new();
+
     public async Task<IConnectionHandle> GetOrCreateConnectionAsync(ProtocolConfig config, CancellationToken token)
     {
         var channelKey = config.Id;
 
-        // 如果连接已存在，直接返回复用
+        // 快速路径：连接已存在，直接复用
         if (_connections.TryGetValue(channelKey, out var existingHandle))
             return existingHandle;
 
-        // 创建新连接
-        var newHandle = await CreateHandleAsync(config, token);
-        return _connections.GetOrAdd(channelKey, newHandle);
+        // 慢速路径：每个 Key 独立加锁，防止并发下为同一协议创建多个物理连接
+        var keyLock = _keyLocks.GetOrAdd(channelKey, _ => new SemaphoreSlim(1, 1));
+        await keyLock.WaitAsync(token);
+        try
+        {
+            // 双重检查：加锁后再查一次，另一个并发线程可能已经完成创建
+            if (_connections.TryGetValue(channelKey, out existingHandle))
+                return existingHandle;
+
+            // 创建新连接
+            var newHandle = await CreateHandleAsync(config, token);
+            _connections[channelKey] = newHandle;
+            return newHandle;
+        }
+        finally
+        {
+            keyLock.Release();
+        }
     }
 
     private async Task<IConnectionHandle> CreateHandleAsync(ProtocolConfig config, CancellationToken token)
@@ -472,6 +490,16 @@ public class ConnectionManager : IConnectionManager, IAsyncDisposable
 
         // 3. 释放旧的连接资源
         foreach (var handle in handlesToDispose)
+        {
+            await handle.DisposeAsync();
+        }
+    }
+
+    public async Task InvalidateConnectionAsync(string protocolId)
+    {
+        // 将指定协议的连接从缓存移除并正确关闭
+        // 下次 GetOrCreateConnectionAsync 将重新建立全新物理连接
+        if (_connections.TryRemove(protocolId, out var handle))
         {
             await handle.DisposeAsync();
         }

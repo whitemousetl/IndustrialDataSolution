@@ -12,7 +12,6 @@ namespace IndustrialDataProcessor.Infrastructure.Communication.Drivers.TcpSpecia
 ///   连接管理：ConnectionManager 创建 ISession 并包装为 DefaultConnectionHandle
 ///   地址格式：OPC UA 标准 NodeId 字符串，如 "ns=2;s=Tag.输入.Uint引风机运行电流"
 ///             支持所有 OPC UA NodeId 格式：
-///               数値 Id   : ns=2;i=1001
 ///               字符串 Id : ns=2;s=MyTag
 ///               GUID  Id  : ns=2;g=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 ///             命名空间索引 ns=0 可省略（默认命名空间）

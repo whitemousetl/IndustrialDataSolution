@@ -24,8 +24,12 @@ public class DataCollectionAppService(
     private readonly DataCollectionChannel _dataChannel = dataChannel;
     private readonly IEquipmentDataProcessor _equipmentDataProcessor = equipmentDataProcessor;
 
+    // 配置监控轮询间隔（毫秒）
+    private const int ConfigMonitorIntervalMs = 5000;
+
     /// <summary>
     /// 初始化并启动所有协议的独立采集任务（后台常驻）
+    /// <para>当配置为空时，会自动启动配置监控模式，定期检查新配置</para>
     /// </summary>
     public async Task StartAllProtocolCollectionTasksAsync(CancellationToken token)
     {
@@ -33,23 +37,87 @@ public class DataCollectionAppService(
         var workstation = await _configCache.GetOrLoadAsync(_repository, token);
 
         // 2. 检查配置有效性
-        if (workstation == null)
+        if (workstation == null || workstation.Protocols == null || workstation.Protocols.Count == 0)
         {
-            _logger.LogWarning("[数据采集] 无法获取工作站配置，当前无可用配置数据。等待配置更新后自动重启...");
+            _logger.LogWarning("[数据采集] 当前无可用配置数据，启动配置监控模式（每 {IntervalMs}ms 检查一次）...",
+                ConfigMonitorIntervalMs);
+
+            // 启动配置监控任务，定期检查配置是否可用
+            _ = Task.Run(() => MonitorConfigAndStartCollectionAsync(token), token);
             return;
         }
 
-        if (workstation.Protocols == null || workstation.Protocols.Count == 0)
-        {
-            _logger.LogWarning("[数据采集] 工作站配置中未找到任何协议配置，无需启动采集任务。等待配置更新后自动重启...");
-            return;
-        }
+        // 3. 配置存在，直接启动采集任务
+        await StartCollectionWithConfigAsync(workstation, token);
+    }
 
+    /// <summary>
+    /// 配置监控循环：定期检查配置是否可用，一旦获取到配置立即启动采集
+    /// </summary>
+    private async Task MonitorConfigAndStartCollectionAsync(CancellationToken token)
+    {
+        _logger.LogInformation("[数据采集] 配置监控任务已启动，等待配置下发...");
+
+        while (!token.IsCancellationRequested)
+        {
+            try
+            {
+                // 清空缓存，强制重新从数据库加载
+                _configCache.ClearCache();
+
+                // 尝试获取配置
+                var workstation = await _configCache.GetOrLoadAsync(_repository, token);
+
+                if (workstation != null && workstation.Protocols != null && workstation.Protocols.Count > 0)
+                {
+                    _logger.LogInformation("[数据采集] 监控到新的配置数据，立即启动采集服务...");
+
+                    // 启动采集任务
+                    await StartCollectionWithConfigAsync(workstation, token);
+
+                    _logger.LogInformation("[数据采集] 配置监控任务已完成，采集服务已启动");
+                    return;
+                }
+
+                // 配置仍不可用，等待后重试
+                _logger.LogDebug("[数据采集] 配置监控：当前无可用配置，{IntervalMs}ms 后重试...",
+                    ConfigMonitorIntervalMs);
+            }
+            catch (OperationCanceledException)
+            {
+                // 正常取消，退出监控
+                _logger.LogInformation("[数据采集] 配置监控任务已取消");
+                return;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[数据采集] 配置监控过程中发生异常，{IntervalMs}ms 后重试...",
+                    ConfigMonitorIntervalMs);
+            }
+
+            // 等待下一次检查
+            try
+            {
+                await Task.Delay(ConfigMonitorIntervalMs, token);
+            }
+            catch (TaskCanceledException)
+            {
+                _logger.LogInformation("[数据采集] 配置监控任务在等待期间被取消");
+                return;
+            }
+        }
+    }
+
+    /// <summary>
+    /// 使用指定配置启动采集任务
+    /// </summary>
+    private async Task StartCollectionWithConfigAsync(WorkstationConfig workstation, CancellationToken token)
+    {
         _logger.LogInformation("[数据采集] 成功加载配置，包含 {ProtocolCount} 个协议，缓存版本: {CacheVersion}",
             workstation.Protocols.Count, _configCache.Version);
 
-        // 3. 针对每个协议，创建一个游离不阻塞的 Task.Run (在后台独立循环)
-        foreach(var protocol in workstation.Protocols)
+        // 针对每个协议，创建一个游离不阻塞的 Task.Run (在后台独立循环)
+        foreach (var protocol in workstation.Protocols)
         {
             _logger.LogInformation("[数据采集] 启动协议 [{ProtocolId}] 的采集线程，协议类型: {ProtocolType}",
                 protocol.Id, protocol.ProtocolType);

@@ -46,6 +46,9 @@ public class OpcUaHostingService(
     // 宿主程序退出时的最终 Token
     private CancellationToken _appStoppingToken;
 
+    // 配置监控轮询间隔（毫秒）
+    private const int ConfigMonitorIntervalMs = 5000;
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         _appStoppingToken = stoppingToken;
@@ -119,80 +122,15 @@ public class OpcUaHostingService(
             // 2. 检查配置有效性
             if (workstationConfig == null)
             {
-                _logger.LogWarning("[OPC UA] 无法获取工作站配置，当前无可用配置数据。等待配置更新后自动重启...");
+                _logger.LogWarning("[OPC UA] 无法获取工作站配置，当前无可用配置数据。启动配置监控模式...");
+
+                // 启动配置监控任务
+                await MonitorConfigAndStartServerAsync(loopToken);
                 return;
             }
 
-            _logger.LogInformation("[OPC UA] 成功加载工作站配置，缓存版本: {CacheVersion}, 工作站ID: {WorkstationId}",
-                _configCache.Version, workstationConfig.Id);
-
-            // 2. 启动 OPC UA Server
-            var app = new ApplicationInstance((ITelemetryContext)null!)
-            {
-                ApplicationName = "WorkstationOpcServer",
-                ApplicationType = ApplicationType.Server,
-                ConfigSectionName = "WorkstationOpcServer"
-            };
-
-            var opcUaServerConfig = await CreateServerConfigurationAsync(_opcUaOptions.Endpoint);
-            app.ApplicationConfiguration = opcUaServerConfig;
-            try
-            {
-                await app.CheckApplicationInstanceCertificatesAsync(false, 2048, loopToken);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "[OPC UA] 证书检查/生成失败，请检查 pki/own 目录权限");
-                throw;
-            }
-
-            _opcServer = new WorkstationOpcServer(workstationConfig);
-
-            // 启动 OPC UA 服务
-            await app.StartAsync(_opcServer);
-
-            _logger.LogInformation("[OPC UA] 服务器已启动并开始监听，服务端点: {Endpoint}", _opcUaOptions.Endpoint);
-
-            // 3. 挂载 OPC 客户端写入事件
-            _opcServer.CustomNodeManager.OnOpcClientWriteRequestedAsync += async (protocol, eq, point, value) =>
-            {
-                var driver = _drivers.FirstOrDefault(d => d.GetProtocolName() == protocol.ProtocolType.ToString());
-                if (driver == null)
-                    return (false, $"未找到协议类型 {protocol.ProtocolType} 的驱动程序");
-
-                var handler = await _connectionManager.GetOrCreateConnectionAsync(protocol, loopToken);
-
-                // ========================================================
-                // 【核心新增】：在这里调用反推逻辑！
-                // 将 OPC 客户端发来的业务值，反转计算成机器通讯需要的底层真实物理值
-                // ========================================================
-                object physicalWriteValue = _pointExpressionConverter.ConvertInverse(point, value) ?? value;
-
-                var writeTask = new WriteTask
-                {
-                    WritePoint = point
-                };
-
-                var result = await driver.WriteAsync(handler, writeTask, physicalWriteValue, loopToken);
-
-                return (result, result ? "Write Success!" : "Write False!");
-            };
-
-            // 4. 死循环：从通道拿数据。注意这里必须绑定 loopToken！
-            await foreach (var (Result, _, _) in dataChannel.OpcUaChannel.ReadAllAsync(loopToken))
-            {
-                try
-                {
-                    if (_opcServer?.CustomNodeManager != null)
-                    {
-                        _opcServer.CustomNodeManager.UpdateDataFromCollectionResult(Result);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "更新 OPC UA 节点失败");
-                }
-            }
+            // 3. 配置存在，直接启动 OPC UA 服务器
+            await StartOpcUaServerAsync(workstationConfig, loopToken);
         }
         catch (OperationCanceledException)
         {
@@ -201,6 +139,131 @@ public class OpcUaHostingService(
         catch (Exception ex)
         {
             _logger.LogCritical(ex, "[OPC UA] 服务器运行过程中发生致命错误，服务将停止");
+        }
+    }
+
+    /// <summary>
+    /// 配置监控循环：定期检查配置是否可用，一旦获取到配置立即启动 OPC UA 服务器
+    /// </summary>
+    private async Task MonitorConfigAndStartServerAsync(CancellationToken loopToken)
+    {
+        _logger.LogInformation("[OPC UA] 配置监控任务已启动，每 {IntervalMs}ms 检查一次新配置...", ConfigMonitorIntervalMs);
+
+        while (!loopToken.IsCancellationRequested)
+        {
+            try
+            {
+                // 等待一段时间后检查配置
+                await Task.Delay(ConfigMonitorIntervalMs, loopToken);
+
+                // 清空缓存，强制重新从数据库加载
+                _configCache.ClearCache();
+
+                // 尝试获取配置
+                WorkstationConfig? workstationConfig = null;
+                using (var scope = serviceProvider.CreateScope())
+                {
+                    var repository = scope.ServiceProvider.GetRequiredService<IWorkstationConfigRepository>();
+                    workstationConfig = await _configCache.GetOrLoadAsync(repository, loopToken);
+                }
+
+                if (workstationConfig != null)
+                {
+                    _logger.LogInformation("[OPC UA] 监控到新的配置数据，立即启动 OPC UA 服务器...");
+
+                    // 启动 OPC UA 服务器
+                    await StartOpcUaServerAsync(workstationConfig, loopToken);
+
+                    _logger.LogInformation("[OPC UA] 配置监控任务已完成，服务器已启动");
+                    return;
+                }
+
+                _logger.LogDebug("[OPC UA] 配置监控：当前无可用配置，继续等待...");
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.LogInformation("[OPC UA] 配置监控任务已取消");
+                return;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[OPC UA] 配置监控过程中发生异常，{IntervalMs}ms 后继续重试...",
+                    ConfigMonitorIntervalMs);
+            }
+        }
+    }
+
+    /// <summary>
+    /// 启动 OPC UA 服务器核心逻辑
+    /// </summary>
+    private async Task StartOpcUaServerAsync(WorkstationConfig workstationConfig, CancellationToken loopToken)
+    {
+        _logger.LogInformation("[OPC UA] 成功加载工作站配置，缓存版本: {CacheVersion}, 工作站ID: {WorkstationId}",
+            _configCache.Version, workstationConfig.Id);
+
+        // 启动 OPC UA Server
+        var app = new ApplicationInstance((ITelemetryContext)null!)
+        {
+            ApplicationName = "WorkstationOpcServer",
+            ApplicationType = ApplicationType.Server,
+            ConfigSectionName = "WorkstationOpcServer"
+        };
+
+        var opcUaServerConfig = await CreateServerConfigurationAsync(_opcUaOptions.Endpoint);
+        app.ApplicationConfiguration = opcUaServerConfig;
+        try
+        {
+            await app.CheckApplicationInstanceCertificatesAsync(false, 2048, loopToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[OPC UA] 证书检查/生成失败，请检查 pki/own 目录权限");
+            throw;
+        }
+
+        _opcServer = new WorkstationOpcServer(workstationConfig);
+
+        // 启动 OPC UA 服务
+        await app.StartAsync(_opcServer);
+
+        _logger.LogInformation("[OPC UA] 服务器已启动并开始监听，服务端点: {Endpoint}", _opcUaOptions.Endpoint);
+
+        // 挂载 OPC 客户端写入事件
+        _opcServer.CustomNodeManager.OnOpcClientWriteRequestedAsync += async (protocol, eq, point, value) =>
+        {
+            var driver = _drivers.FirstOrDefault(d => d.GetProtocolName() == protocol.ProtocolType.ToString());
+            if (driver == null)
+                return (false, $"未找到协议类型 {protocol.ProtocolType} 的驱动程序");
+
+            var handler = await _connectionManager.GetOrCreateConnectionAsync(protocol, loopToken);
+
+            // 将 OPC 客户端发来的业务值，反转计算成机器通讯需要的底层真实物理值
+            object physicalWriteValue = _pointExpressionConverter.ConvertInverse(point, value) ?? value;
+
+            var writeTask = new WriteTask
+            {
+                WritePoint = point
+            };
+
+            var result = await driver.WriteAsync(handler, writeTask, physicalWriteValue, loopToken);
+
+            return (result, result ? "Write Success!" : "Write False!");
+        };
+
+        // 死循环：从通道拿数据
+        await foreach (var (Result, _, _) in dataChannel.OpcUaChannel.ReadAllAsync(loopToken))
+        {
+            try
+            {
+                if (_opcServer?.CustomNodeManager != null)
+                {
+                    _opcServer.CustomNodeManager.UpdateDataFromCollectionResult(Result);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "更新 OPC UA 节点失败");
+            }
         }
     }
 

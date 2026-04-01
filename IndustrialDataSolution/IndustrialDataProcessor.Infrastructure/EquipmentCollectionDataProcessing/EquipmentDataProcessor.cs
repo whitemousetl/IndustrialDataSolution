@@ -82,31 +82,36 @@ public class EquipmentDataProcessor : IEquipmentDataProcessor
 
     private void SerializeEquipmentData(EquipmentResult equipmentResult, ConcurrentDictionary<string, object?> forwardEquipmentResult, ConcurrentBag<ParameterConfig> virtualPoints, ConcurrentDictionary<string, string> dataEquipmentId)
     {
-        // 1. 处理虚拟点 (这个方法内部会把算出的值添加到 forwardEquipmentResult 字典中)
-        _virtualPointCalculator.Calculate(virtualPoints, forwardEquipmentResult);
+        // 1. 处理虚拟点（带故障传播机制）
+        // 传入点位结果列表，供 VirtualPointCalculator 检查源点状态
+        var calcResults = _virtualPointCalculator.Calculate(virtualPoints, forwardEquipmentResult, equipmentResult.PointResults);
 
+        // 2. 根据计算结果更新虚拟点的 PointResult
         foreach (var vPoint in virtualPoints)
         {
-            if (forwardEquipmentResult.TryGetValue(vPoint.Label, out var calculatedVal))
+            if (!calcResults.TryGetValue(vPoint.Label, out var calcResult))
+                continue;
+
+            var existingPoint = equipmentResult.PointResults.FirstOrDefault(p => p.Label == vPoint.Label);
+            if (existingPoint == null)
+                continue;
+
+            // 【故障传播核心】根据计算结果设置虚拟点状态
+            existingPoint.Value = calcResult.Value;
+            existingPoint.ReadIsSuccess = calcResult.IsSuccess;
+
+            if (!calcResult.IsSuccess)
             {
-                var existingPoint = equipmentResult.PointResults.FirstOrDefault(p => p.Label == vPoint.Label);
-
-                if (existingPoint != null)
-                {
-                    existingPoint.Value = calculatedVal;
-                    bool isCalculateSuccess = calculatedVal != null;
-
-                    // 收敛之前的混乱逻辑：直接决定这个虚拟点是成功还是失败
-                    if (!isCalculateSuccess)
-                    {
-                        existingPoint.ReadIsSuccess = false;
-                        existingPoint.ErrorMsg = "虚拟点计算失败或未能得出有效值";
-                    }
-                }
+                // 继承源点的错误信息
+                existingPoint.ErrorMsg = calcResult.ErrorMsg ?? "虚拟点计算失败";
+            }
+            else
+            {
+                existingPoint.ErrorMsg = string.Empty;
             }
         }
 
-        // 2. 将最终包含了所有转换+计算点位的字典序列化存入将要入库的 map 中
+        // 3. 将最终包含了所有转换+计算点位的字典序列化存入将要入库的 map 中
         var data = JsonSerializer.Serialize(forwardEquipmentResult, _jsonOptions);
         dataEquipmentId[equipmentResult.EquipmentId] = data;
     }

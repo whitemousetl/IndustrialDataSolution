@@ -22,6 +22,29 @@ public class NodeManager : CustomNodeManager2
     // 【新增】反向映射字典：通过节点的 NodeId (字符串形式), 找到对应的路由图：(协议, 设备, 参数点位)
     private readonly ConcurrentDictionary<string, (ProtocolConfig Protocol, EquipmentConfig Equipment, ParameterConfig Parameter)> _nodeRoutingMap = [];
 
+    // ============== 状态节点缓存 ==============
+    // 全局汇总状态节点
+    private FolderState? _summaryFolder;
+    private BaseDataVariableState? _lastUpdateTimeNode;
+    private BaseDataVariableState? _totalProtocolsNode;
+    private BaseDataVariableState? _healthyProtocolsNode;
+    private BaseDataVariableState? _errorProtocolsNode;
+
+    // 协议状态节点缓存
+    private readonly Dictionary<string, FolderState> _protocolStatusFolders = new();
+    private readonly Dictionary<string, BaseDataVariableState> _protocolStatusNodes = new();
+
+    // 设备状态节点缓存
+    private readonly Dictionary<string, FolderState> _equipmentStatusFolders = new();
+    private readonly Dictionary<string, BaseDataVariableState> _equipmentStatusNodes = new();
+
+    // 点位状态节点缓存
+    private readonly Dictionary<string, FolderState> _pointStatusFolders = new();
+    private readonly Dictionary<string, BaseDataVariableState> _pointStatusNodes = new();
+
+    // 状态根节点
+    private FolderState? _statusRootFolder;
+
     /// <summary>
     /// 标准构造函数：传入服务器核心、应用程序配置
     /// namespaceUris: 这个节点管理器负责的命名空间（如 "http://yourdomain.com/SuperUAServer"）
@@ -36,98 +59,85 @@ public class NodeManager : CustomNodeManager2
 
     public override void CreateAddressSpace(IDictionary<NodeId, IList<IReference>> externalReferences)
     {
-        // 1. 创建根节点: 工作站文件夹 (以工作站名称或ID命名)
-        var workstationFolder = CreateFolder(ObjectIds.ObjectsFolder, _config.Id ?? "Workstation", externalReferences);
+        // -------------------------------------------------------
+        // 树 1: Workstation 数据树
+        //   - 用途：存放采集值，供原有客户端程序通过约定好的 NodeId 访问
+        //   - 数据节点 NodeId 格式：{设备ID}_{参数Label}（如 E-001_温度）
+        //   - 文件夹仅用于地址空间浏览，NodeId 使用路径格式（如 Workstation/E-001）
+        // -------------------------------------------------------
+        var workstationFolder = CreateFolder(ObjectIds.ObjectsFolder, "Workstation", externalReferences);
 
-        // 2. 遍历配置，找到所有启动的设备
+        // -------------------------------------------------------
+        // 树 2: EquipmentStatus 状态树
+        //   - 用途：存放采集状态信息（成功/失败/耗时/错误信息等）
+        //   - 所有状态节点 NodeId 均使用路径格式（含 /），与数据节点（含 _）天然不冲突
+        // -------------------------------------------------------
+        _statusRootFolder = CreateFolder(ObjectIds.ObjectsFolder, "EquipmentStatus", externalReferences);
+
+        // 创建全局汇总状态节点
+        CreateSummaryStatusNodes(externalReferences);
+
+        // 遍历配置，分别创建数据节点和状态节点
         foreach(var protocol in _config.Protocols)
         {
+            CreateProtocolStatusNodes(protocol, externalReferences);
+
             foreach(var equipment in protocol.Equipments.Where(e => e.IsCollect))
             {
                 if (equipment.Parameters == null || equipment.Parameters.Count == 0) continue;
 
-                // 3. 为每个设备在其下创建一层文件夹 (使用 EquipmentId 作为名称)
-                var equipmentFolder = CreateFolder(workstationFolder.NodeId, equipment.Id, externalReferences);
+                // 在 Workstation 树下为该设备创建文件夹（仅用于浏览，NodeId 路径格式不冲突）
+                var equipmentDataFolder = CreateFolder(workstationFolder.NodeId, equipment.Id, externalReferences);
 
-                // 4. 为设备下的每个监控点创建变量节点
-                //foreach(var point in equipment.Parameters.Where(p => p.IsMonitor))
+                // 在 EquipmentStatus 树下创建设备状态节点
+                CreateEquipmentStatusNodes(protocol, equipment, externalReferences);
+
                 foreach(var point in equipment.Parameters)
                 {
-                    // 数据类型映射 
-                    NodeId opcDataType = MapToOpcDataType(point.DataType);
+                    // 创建数据值节点：NodeId = {设备ID}_{Label}（保留原始约定）
+                    CreateLegacyDataValueNode(protocol, equipment, point, equipmentDataFolder);
 
-                    // 5. 在设备文件夹下创建叶子变量节点 (用 Label 命名)
-                    var pointVariable = CreateVariable(equipmentFolder, point.Label, opcDataType, AccessLevels.CurrentReadOrWrite);
-
-                    // 6. (关键) 把这个节点按一个唯一键存入字典，例如 "EquipmentId_Label"，以便在更新数据时能瞬间找到它
-                    // 同时存储配置的 DataType，用于后续值更新时的类型转换
-                    string cacheKey = $"{equipment.Id}_{point.Label}";
-                    _pointNodes[cacheKey] = (pointVariable, point.DataType);
-
-                    //【核心新增】将这个变量的 NodeId 作为键，把协议、设备、点位的配置打包存起来
-                    // 注意：这里的 pointVariable.NodeId.Identifier 就是你在 CreateVariable 传的 name (即 point.Label)
-                    // 但为了保证全局唯一，建议把变量的 NodeId 改成带设备前缀的，或者直接用 cacheKey 作为 NodeId 的 Identifier。
-                    // 假设你的 OpcUa 节点 NodeId 其实就是上面的 cacheKey，我们这样绑定：
-                    _nodeRoutingMap[pointVariable.NodeId.Identifier.ToString()!] = (protocol, equipment, point);
-
-                    // 设置一下初始值（根据数据类型给个默认0或空字符串）
-                    // 设置初始值，防止客户端连接时没有拿到值报错
-                    object defaultValue = GetDefaultValue(point.DataType);
-                    // 【核心修改】这里调用重载方法，将初始状态设为 BadWaitingForInitialData (等待初始数据)
-                    UpdateVariableWithStatus(pointVariable, defaultValue, point.DataType, StatusCodes.BadWaitingForInitialData);
+                    // 创建状态信息节点：NodeId = EquipmentStatus/.../...（路径格式）
+                    CreatePointStatusNodes(protocol, equipment, point, externalReferences);
                 }
             }
         }
     }
 
-    public void UpdateDataFromCollectionResult(ProtocolResult result)
+    /// <summary>
+    /// 创建数据值节点，使用与外部程序约定好的原始 NodeId 格式：{设备ID}_{参数Label}
+    /// <para>例如：E-001_温度、E-002_压力</para>
+    /// <para>此 NodeId 格式使用下划线（_），与状态节点的路径格式（/）天然不冲突</para>
+    /// </summary>
+    private void CreateLegacyDataValueNode(ProtocolConfig protocol, EquipmentConfig equipment, ParameterConfig point, FolderState equipmentFolder)
     {
-        //if (!result.ReadIsSuccess) return;// 如果整个协议读失败了，可以选择不更新或更新质量戳为Bad
+        // 使用约定好的原始 NodeId 格式，确保与外部客户端程序的兼容性
+        string legacyNodeId = $"{equipment.Id}_{point.Label}";
+        NodeId opcDataType = MapToOpcDataType(point.DataType);
 
-        lock (Lock) // 加锁保护内部节点状态
+        var variable = new BaseDataVariableState(equipmentFolder)
         {
-            // 级别1: 协议级彻底失败（例如：断网了、连接被服务端踢了，根本没拿到 EquipmentResults）
-            if (result.AllEquipmentsFailed())
-            {
-                // 此时直接查找该协议下所有的节点缓存，统一打上通讯失败的质量戳
-                MarkProtocolNodesAsBad(result.ProtocolId, StatusCodes.BadCommunicationError);
-                return; // 直接返回，不必往下找了
-            }
+            NodeId = new NodeId(legacyNodeId, NamespaceIndex), // 原始 NodeId 格式，不使用路径继承
+            BrowseName = new QualifiedName(point.Label, NamespaceIndex),
+            DisplayName = new LocalizedText(point.Label),
+            DataType = opcDataType,
+            ValueRank = ValueRanks.Scalar,
+            AccessLevel = AccessLevels.CurrentReadOrWrite,
+            UserAccessLevel = AccessLevels.CurrentReadOrWrite,
+            Historizing = false,
+            OnSimpleWriteValue = OnWriteVariable
+        };
 
-            // 级别2: 协议没问题，遍历其设备结果
-            foreach (var eqResult in result.EquipmentResults)
-            {
-                // 设备级失败（例如：由于一根串口线上挂了3个表，只有这一个表断电了不回数据）
-                if (eqResult.AllPointsFailed())
-                {
-                    MarkEquipmentNodesAsBad(eqResult.EquipmentId, StatusCodes.BadNotConnected);
-                    continue; // 跨过当前设备，继续解析下个正常的设备
-                }
+        equipmentFolder.AddChild(variable);
+        AddPredefinedNode(SystemContext, variable);
 
-                // 级别3: 设备在线，细致解析每一个点
-                foreach (var ptResult in eqResult.PointResults)
-                {
-                    string cacheKey = $"{eqResult.EquipmentId}_{ptResult.Label}";
+        // 注册到缓存字典（供采集结果更新值，供 OnWriteVariable 路由下发）
+        _pointNodes[legacyNodeId] = (variable, point.DataType);
+        _nodeRoutingMap[legacyNodeId] = (protocol, equipment, point);
 
-                    if (_pointNodes.TryGetValue(cacheKey, out var nodeInfo))
-                    {
-                        var (variableNode, declaredDataType) = nodeInfo;
-                        
-                        if (ptResult.ReadIsSuccess && ptResult.Value != null)
-                        {
-                            // 单点读取成功: 将值转换为声明的数据类型后再更新
-                            UpdateVariableWithStatus(variableNode, ptResult.Value, declaredDataType, StatusCodes.Good);
-                        }
-                            
-                        else
-                            // 单点读取失败（比如：仅仅是这个设备的这一个寄存器地址配错/无权限了）
-                            // 关键：保留节点原来的值（variableNode.Value），仅将状态明确改为 Bad
-                            // 单点读取失败: 只更新状态码，保留旧的值
-                            UpdateVariableWithStatus(variableNode, variableNode.Value, declaredDataType, StatusCodes.Bad);
-                    }
-                }
-            }
-        }
+        // 设置初始占位值和 Bad 状态码，等待首次采集数据到达
+        object defaultValue = GetDefaultValue(point.DataType);
+        UpdateVariableWithStatus(variable, defaultValue, point.DataType, StatusCodes.BadWaitingForInitialData);
     }
 
     /// <summary>
@@ -256,12 +266,15 @@ public class NodeManager : CustomNodeManager2
     /// <returns>创建的文件夹状态对象</returns>
     private FolderState CreateFolder(NodeId parentId, string name, IDictionary<NodeId, IList<IReference>> externalRefs)
     {
-        // 创建文件夹状态对象
-        // null 表示没有父节点状态对象（因为父节点是标准节点）
+        // 生成全局唯一的 NodeId：基于父节点路径 + 当前名称，防止同名文件夹产生重复 NodeId
+        // 若父节点是 OPC UA 标准数字 ID（如 ObjectsFolder = 85），顶层节点直接用名称
+        string uniqueId = parentId.IdType == IdType.String
+            ? $"{parentId.Identifier}/{name}"
+            : name;
+
         var folder = new FolderState(null)
         {
-            // 设置节点 ID，使用命名空间索引确保唯一性
-            NodeId = new NodeId(name, NamespaceIndex),
+            NodeId = new NodeId(uniqueId, NamespaceIndex),
             // 浏览名称，客户端浏览地址空间时显示
             BrowseName = new QualifiedName(name, NamespaceIndex),
             // 显示名称，用于用户界面显示
@@ -303,10 +316,9 @@ public class NodeManager : CustomNodeManager2
     /// <returns>创建的变量状态对象</returns>
     private BaseDataVariableState CreateVariable(NodeState parent, string name, NodeId dataType, byte accessLevel)
     {
-        // 【核心修改】生成全局唯一的 NodeId。
-        // 父节点的名字是设备Id (例如 "Eq_1001")，所以我们可以合并为 "Eq_1001_温度"。
-        // 这样即使几十个设备都有"温度"，它们的 NodeId 也是不同的。
-        string uniqueNodeId = $"{parent.BrowseName.Name}_{name}";
+        // 使用父节点的 NodeId 路径生成全局唯一 NodeId，与 CreateFolder 保持一致的路径规则
+        string parentPath = parent.NodeId.Identifier?.ToString() ?? parent.BrowseName.Name;
+        string uniqueNodeId = $"{parentPath}/{name}";
 
         // 创建基础数据变量状态对象
         var variable = new BaseDataVariableState(parent)
@@ -420,6 +432,324 @@ public class NodeManager : CustomNodeManager2
         catch
         {
             return value; // 极端情况转换失败时，返回原值进行兜底
+        }
+    }
+
+    // ==================== 状态节点创建方法 ====================
+
+    /// <summary>
+    /// 创建全局汇总状态节点
+    /// </summary>
+    private void CreateSummaryStatusNodes(IDictionary<NodeId, IList<IReference>> externalReferences)
+    {
+        if (_statusRootFolder == null) return;
+
+        _summaryFolder = CreateFolder(_statusRootFolder.NodeId, "Summary", externalReferences);
+
+        _lastUpdateTimeNode = CreateStatusVariable(_summaryFolder, "LastUpdateTime", DataTypeIds.String, "等待更新");
+        _totalProtocolsNode = CreateStatusVariable(_summaryFolder, "TotalProtocols", DataTypeIds.Int32, 0);
+        _healthyProtocolsNode = CreateStatusVariable(_summaryFolder, "HealthyProtocols", DataTypeIds.Int32, 0);
+        _errorProtocolsNode = CreateStatusVariable(_summaryFolder, "ErrorProtocols", DataTypeIds.Int32, 0);
+    }
+
+    /// <summary>
+    /// 创建协议状态节点
+    /// </summary>
+    private void CreateProtocolStatusNodes(ProtocolConfig protocol, IDictionary<NodeId, IList<IReference>> externalReferences)
+    {
+        if (_statusRootFolder == null) return;
+
+        string protocolKey = $"{protocol.Id}";
+        var protocolFolder = CreateFolder(_statusRootFolder.NodeId, protocolKey, externalReferences);
+        _protocolStatusFolders[protocol.Id] = protocolFolder;
+
+        // 协议级状态变量
+        _protocolStatusNodes[$"{protocol.Id}_ReadIsSuccess"] = CreateStatusVariable(protocolFolder, "ReadIsSuccess", DataTypeIds.Boolean, false);
+        _protocolStatusNodes[$"{protocol.Id}_ErrorMsg"] = CreateStatusVariable(protocolFolder, "ErrorMsg", DataTypeIds.String, "等待初始化");
+        _protocolStatusNodes[$"{protocol.Id}_ElapsedMs"] = CreateStatusVariable(protocolFolder, "ElapsedMs", DataTypeIds.Int64, 0L);
+        _protocolStatusNodes[$"{protocol.Id}_TotalEquipments"] = CreateStatusVariable(protocolFolder, "TotalEquipments", DataTypeIds.Int32, 0);
+        _protocolStatusNodes[$"{protocol.Id}_SuccessEquipments"] = CreateStatusVariable(protocolFolder, "SuccessEquipments", DataTypeIds.Int32, 0);
+        _protocolStatusNodes[$"{protocol.Id}_FailedEquipments"] = CreateStatusVariable(protocolFolder, "FailedEquipments", DataTypeIds.Int32, 0);
+        _protocolStatusNodes[$"{protocol.Id}_TotalPoints"] = CreateStatusVariable(protocolFolder, "TotalPoints", DataTypeIds.Int32, 0);
+        _protocolStatusNodes[$"{protocol.Id}_SuccessPoints"] = CreateStatusVariable(protocolFolder, "SuccessPoints", DataTypeIds.Int32, 0);
+        _protocolStatusNodes[$"{protocol.Id}_FailedPoints"] = CreateStatusVariable(protocolFolder, "FailedPoints", DataTypeIds.Int32, 0);
+        _protocolStatusNodes[$"{protocol.Id}_StartTime"] = CreateStatusVariable(protocolFolder, "StartTime", DataTypeIds.String, "-");
+        _protocolStatusNodes[$"{protocol.Id}_EndTime"] = CreateStatusVariable(protocolFolder, "EndTime", DataTypeIds.String, "-");
+        _protocolStatusNodes[$"{protocol.Id}_ProtocolType"] = CreateStatusVariable(protocolFolder, "ProtocolType", DataTypeIds.String, protocol.ProtocolType.ToString());
+    }
+
+    /// <summary>
+    /// 创建设备状态节点
+    /// </summary>
+    private void CreateEquipmentStatusNodes(ProtocolConfig protocol, EquipmentConfig equipment, IDictionary<NodeId, IList<IReference>> externalReferences)
+    {
+        if (_statusRootFolder == null) return;
+        if (!_protocolStatusFolders.TryGetValue(protocol.Id, out var protocolFolder)) return;
+
+        string equipmentKey = $"{protocol.Id}_{equipment.Id}";
+        var equipmentFolder = CreateFolder(protocolFolder.NodeId, equipment.Id, externalReferences);
+        _equipmentStatusFolders[equipmentKey] = equipmentFolder;
+
+        // 设备级状态变量
+        _equipmentStatusNodes[$"{equipmentKey}_ReadIsSuccess"] = CreateStatusVariable(equipmentFolder, "ReadIsSuccess", DataTypeIds.Boolean, false);
+        _equipmentStatusNodes[$"{equipmentKey}_ErrorMsg"] = CreateStatusVariable(equipmentFolder, "ErrorMsg", DataTypeIds.String, "等待初始化");
+        _equipmentStatusNodes[$"{equipmentKey}_ElapsedMs"] = CreateStatusVariable(equipmentFolder, "ElapsedMs", DataTypeIds.Int64, 0L);
+        _equipmentStatusNodes[$"{equipmentKey}_TotalPoints"] = CreateStatusVariable(equipmentFolder, "TotalPoints", DataTypeIds.Int32, 0);
+        _equipmentStatusNodes[$"{equipmentKey}_SuccessPoints"] = CreateStatusVariable(equipmentFolder, "SuccessPoints", DataTypeIds.Int32, 0);
+        _equipmentStatusNodes[$"{equipmentKey}_FailedPoints"] = CreateStatusVariable(equipmentFolder, "FailedPoints", DataTypeIds.Int32, 0);
+        _equipmentStatusNodes[$"{equipmentKey}_StartTime"] = CreateStatusVariable(equipmentFolder, "StartTime", DataTypeIds.String, "-");
+        _equipmentStatusNodes[$"{equipmentKey}_EndTime"] = CreateStatusVariable(equipmentFolder, "EndTime", DataTypeIds.String, "-");
+        _equipmentStatusNodes[$"{equipmentKey}_EquipmentName"] = CreateStatusVariable(equipmentFolder, "EquipmentName", DataTypeIds.String, equipment.Name ?? equipment.Id);
+
+        // 创建点位状态文件夹
+        var pointsFolder = CreateFolder(equipmentFolder.NodeId, "Points", externalReferences);
+        _pointStatusFolders[equipmentKey] = pointsFolder;
+    }
+
+    /// <summary>
+    /// 创建点位状态节点（仅包含状态信息，不再重复创建数据值节点）
+    /// <para>数据值节点由 CreateLegacyDataValueNode 在 Workstation 树下创建，此处只创建辅助状态信息</para>
+    /// </summary>
+    private void CreatePointStatusNodes(ProtocolConfig protocol, EquipmentConfig equipment, ParameterConfig point, IDictionary<NodeId, IList<IReference>> externalReferences)
+    {
+        string equipmentKey = $"{protocol.Id}_{equipment.Id}";
+        if (!_pointStatusFolders.TryGetValue(equipmentKey, out var pointsFolder)) return;
+
+        string pointKey = $"{equipmentKey}_{point.Label}";
+        var pointFolder = CreateFolder(pointsFolder.NodeId, point.Label, externalReferences);
+
+        // ========== 状态信息节点（只读）==========
+        // 【关键修复】不再创建数据值节点，避免覆盖 CreateLegacyDataValueNode 中注册的正确节点
+        // 数据值由 Workstation 树下的节点（NodeId 格式：{设备ID}_{参数Label}）提供
+        _pointStatusNodes[$"{pointKey}_ReadIsSuccess"] = CreateStatusVariable(pointFolder, "ReadIsSuccess", DataTypeIds.Boolean, false);
+        _pointStatusNodes[$"{pointKey}_ErrorMsg"] = CreateStatusVariable(pointFolder, "ErrorMsg", DataTypeIds.String, "等待初始化");
+        _pointStatusNodes[$"{pointKey}_ElapsedMs"] = CreateStatusVariable(pointFolder, "ElapsedMs", DataTypeIds.Int64, 0L);
+        _pointStatusNodes[$"{pointKey}_DataType"] = CreateStatusVariable(pointFolder, "DataType", DataTypeIds.String, point.DataType?.ToString() ?? "Unknown");
+        _pointStatusNodes[$"{pointKey}_Address"] = CreateStatusVariable(pointFolder, "Address", DataTypeIds.String, point.Address ?? "-");
+
+        // 【新增】创建一个只读的 Value 镜像节点，用于在状态树中查看当前采集值
+        // 此节点使用独立的路径格式 NodeId，不会与 Workstation 树的数据节点冲突
+        NodeId opcDataType = MapToOpcDataType(point.DataType);
+        var valueNode = CreateStatusVariable(pointFolder, "Value", opcDataType, GetDefaultValue(point.DataType));
+        // 将镜像节点存入点位状态字典，供状态更新时同步值
+        _pointStatusNodes[$"{pointKey}_Value"] = valueNode;
+    }
+
+    /// <summary>
+    /// 创建状态变量的辅助方法
+    /// </summary>
+    private BaseDataVariableState CreateStatusVariable(NodeState parent, string name, NodeId dataType, object initialValue)
+    {
+        // 使用父节点的 NodeId 路径生成全局唯一 NodeId，与其他节点保持一致的路径规则
+        string parentPath = parent.NodeId.Identifier?.ToString() ?? parent.BrowseName.Name;
+        var variable = new BaseDataVariableState(parent)
+        {
+            NodeId = new NodeId($"{parentPath}/{name}", NamespaceIndex),
+            BrowseName = new QualifiedName(name, NamespaceIndex),
+            DisplayName = new LocalizedText(name),
+            DataType = dataType,
+            ValueRank = ValueRanks.Scalar,
+            AccessLevel = AccessLevels.CurrentReadOrWrite,
+            UserAccessLevel = AccessLevels.CurrentReadOrWrite,
+            Value = initialValue
+        };
+
+        parent.AddChild(variable);
+        AddPredefinedNode(SystemContext, variable);
+        return variable;
+    }
+
+    // ==================== 状态更新方法 ====================
+
+    /// <summary>
+    /// 更新数据采集结果到状态节点（扩展版本，包含完整状态信息）
+    /// </summary>
+    public void UpdateDataFromCollectionResult(ProtocolResult result)
+    {
+        lock (Lock)
+        {
+            // 1. 更新数据节点（原有逻辑）
+            UpdateDataNodes(result);
+
+            // 2. 更新协议状态节点
+            UpdateProtocolStatus(result);
+
+            // 3. 更新设备状态节点
+            foreach (var eqResult in result.EquipmentResults)
+            {
+                UpdateEquipmentStatus(result.ProtocolId, eqResult);
+            }
+
+            // 4. 更新全局汇总状态
+            UpdateSummaryStatus(result);
+        }
+    }
+
+    /// <summary>
+    /// 更新数据节点（原有逻辑抽取）
+    /// </summary>
+    private void UpdateDataNodes(ProtocolResult result)
+    {
+        // 协议级彻底失败
+        if (result.AllEquipmentsFailed())
+        {
+            MarkProtocolNodesAsBad(result.ProtocolId, StatusCodes.BadCommunicationError);
+            return;
+        }
+
+        // 遍历设备结果
+        foreach (var eqResult in result.EquipmentResults)
+        {
+            if (eqResult.AllPointsFailed())
+            {
+                MarkEquipmentNodesAsBad(eqResult.EquipmentId, StatusCodes.BadNotConnected);
+                continue;
+            }
+
+            // 遍历点位结果
+            foreach (var ptResult in eqResult.PointResults)
+            {
+                string cacheKey = $"{eqResult.EquipmentId}_{ptResult.Label}";
+                if (_pointNodes.TryGetValue(cacheKey, out var nodeInfo))
+                {
+                    var (variableNode, declaredDataType) = nodeInfo;
+                    if (ptResult.ReadIsSuccess && ptResult.Value != null)
+                    {
+                        UpdateVariableWithStatus(variableNode, ptResult.Value, declaredDataType, StatusCodes.Good);
+                    }
+                    else
+                    {
+                        UpdateVariableWithStatus(variableNode, variableNode.Value, declaredDataType, StatusCodes.Bad);
+                    }
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// 更新协议状态节点
+    /// </summary>
+    private void UpdateProtocolStatus(ProtocolResult result)
+    {
+        string protocolId = result.ProtocolId;
+
+        UpdateStatusNode($"{protocolId}_ReadIsSuccess", result.ReadIsSuccess);
+        UpdateStatusNode($"{protocolId}_ErrorMsg", result.ErrorMsg ?? (result.ReadIsSuccess ? "成功" : "失败"));
+        UpdateStatusNode($"{protocolId}_ElapsedMs", result.ElapsedMs);
+        UpdateStatusNode($"{protocolId}_TotalEquipments", result.TotalEquipments);
+        UpdateStatusNode($"{protocolId}_SuccessEquipments", result.SuccessEquipments);
+        UpdateStatusNode($"{protocolId}_FailedEquipments", result.FailedEquipments);
+        UpdateStatusNode($"{protocolId}_TotalPoints", result.TotalPoints);
+        UpdateStatusNode($"{protocolId}_SuccessPoints", result.SuccessPoints);
+        UpdateStatusNode($"{protocolId}_FailedPoints", result.FailedPoints);
+        UpdateStatusNode($"{protocolId}_StartTime", result.StartTime);
+        UpdateStatusNode($"{protocolId}_EndTime", result.EndTime);
+    }
+
+    /// <summary>
+    /// 更新设备状态节点
+    /// </summary>
+    private void UpdateEquipmentStatus(string protocolId, EquipmentResult eqResult)
+    {
+        string equipmentKey = $"{protocolId}_{eqResult.EquipmentId}";
+
+        UpdateStatusNode($"{equipmentKey}_ReadIsSuccess", eqResult.ReadIsSuccess);
+        UpdateStatusNode($"{equipmentKey}_ErrorMsg", eqResult.ErrorMsg ?? (eqResult.ReadIsSuccess ? "成功" : "失败"));
+        UpdateStatusNode($"{equipmentKey}_ElapsedMs", eqResult.ElapsedMs);
+        UpdateStatusNode($"{equipmentKey}_TotalPoints", eqResult.TotalPoints);
+        UpdateStatusNode($"{equipmentKey}_SuccessPoints", eqResult.SuccessPoints);
+        UpdateStatusNode($"{equipmentKey}_FailedPoints", eqResult.FailedPoints);
+        UpdateStatusNode($"{equipmentKey}_StartTime", eqResult.StartTime);
+        UpdateStatusNode($"{equipmentKey}_EndTime", eqResult.EndTime);
+
+        // 更新点位状态
+        foreach (var ptResult in eqResult.PointResults)
+        {
+            UpdatePointStatus(equipmentKey, ptResult);
+        }
+    }
+
+    /// <summary>
+    /// 更新点位状态节点
+    /// </summary>
+    private void UpdatePointStatus(string equipmentKey, PointResult ptResult)
+    {
+        string pointKey = $"{equipmentKey}_{ptResult.Label}";
+
+        UpdateStatusNode($"{pointKey}_ReadIsSuccess", ptResult.ReadIsSuccess);
+        UpdateStatusNode($"{pointKey}_ErrorMsg", ptResult.ErrorMsg ?? (ptResult.ReadIsSuccess ? "成功" : "失败"));
+        UpdateStatusNode($"{pointKey}_ElapsedMs", ptResult.ElapsedMs);
+        UpdateStatusNode($"{pointKey}_DataType", ptResult.DataType?.ToString() ?? "Unknown");
+
+        // 【新增】同步更新状态树中的 Value 镜像节点（只读副本）
+        // 这样在 EquipmentStatus 树中也能看到当前采集值，方便诊断
+        if (ptResult.ReadIsSuccess && ptResult.Value != null)
+        {
+            // 将值转换为预期类型后更新镜像节点
+            var convertedValue = ConvertToExpectedType(ptResult.Value, ptResult.DataType);
+            UpdateStatusNode($"{pointKey}_Value", convertedValue ?? GetDefaultValue(ptResult.DataType));
+        }
+    }
+
+    /// <summary>
+    /// 更新全局汇总状态
+    /// </summary>
+    private void UpdateSummaryStatus(ProtocolResult result)
+    {
+        if (_lastUpdateTimeNode != null)
+        {
+            _lastUpdateTimeNode.Value = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff");
+            _lastUpdateTimeNode.ClearChangeMasks(SystemContext, false);
+        }
+
+        // 计算协议统计（这里简化处理，实际可能需要跨多次调用维护状态）
+        if (_totalProtocolsNode != null)
+        {
+            _totalProtocolsNode.Value = _config.Protocols.Count;
+            _totalProtocolsNode.ClearChangeMasks(SystemContext, false);
+        }
+
+        // 根据当前结果更新健康/错误协议数
+        if (_healthyProtocolsNode != null && _errorProtocolsNode != null)
+        {
+            int healthy = result.ReadIsSuccess ? 1 : 0;
+            int error = result.ReadIsSuccess ? 0 : 1;
+            _healthyProtocolsNode.Value = healthy;
+            _errorProtocolsNode.Value = error;
+            _healthyProtocolsNode.ClearChangeMasks(SystemContext, false);
+            _errorProtocolsNode.ClearChangeMasks(SystemContext, false);
+        }
+    }
+
+    /// <summary>
+    /// 更新状态节点值的通用方法
+    /// </summary>
+    private void UpdateStatusNode(string key, object value)
+    {
+        if (_protocolStatusNodes.TryGetValue(key, out var node))
+        {
+            node.Value = value;
+            node.Timestamp = DateTime.Now;
+            node.StatusCode = StatusCodes.Good;
+            node.ClearChangeMasks(SystemContext, false);
+            return;
+        }
+
+        if (_equipmentStatusNodes.TryGetValue(key, out node))
+        {
+            node.Value = value;
+            node.Timestamp = DateTime.Now;
+            node.StatusCode = StatusCodes.Good;
+            node.ClearChangeMasks(SystemContext, false);
+            return;
+        }
+
+        if (_pointStatusNodes.TryGetValue(key, out node))
+        {
+            node.Value = value;
+            node.Timestamp = DateTime.Now;
+            node.StatusCode = StatusCodes.Good;
+            node.ClearChangeMasks(SystemContext, false);
         }
     }
 }

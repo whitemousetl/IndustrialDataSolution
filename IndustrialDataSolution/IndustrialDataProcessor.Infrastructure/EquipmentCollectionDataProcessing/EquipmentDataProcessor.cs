@@ -1,4 +1,5 @@
-﻿using IndustrialDataProcessor.Domain.Repositories;
+﻿using IndustrialDataProcessor.Domain.Enums;
+using IndustrialDataProcessor.Domain.Repositories;
 using IndustrialDataProcessor.Domain.Workstation.Configs;
 using IndustrialDataProcessor.Domain.Workstation.Results;
 using System.Collections.Concurrent;
@@ -64,6 +65,8 @@ public class EquipmentDataProcessor : IEquipmentDataProcessor
             try
             {
                 var finalValue = _pointExpressionConverter.Convert(point, pointResult.Value);
+                // 对 Float/Double 类型应用两位小数精度控制
+                finalValue = ApplyPrecisionControl(point.DataType, finalValue);
                 if (!string.IsNullOrEmpty(pointResult?.Label))
                 {
                     forwardEquipmentResult[pointResult.Label] = finalValue;
@@ -79,6 +82,23 @@ public class EquipmentDataProcessor : IEquipmentDataProcessor
     }
 
     private static bool IsValidPointResult(PointResult pointResult) => pointResult != null && !string.IsNullOrWhiteSpace(pointResult.Label);
+
+    /// <summary>
+    /// 对 Float/Double 类型的数值应用两位小数精度控制，其他类型原值返回
+    /// </summary>
+    private static object? ApplyPrecisionControl(DataType? dataType, object? value)
+    {
+        if (value == null) return null;
+        if (dataType is not (DataType.Float or DataType.Double)) return value;
+        try
+        {
+            return SingleVariableExpressionEvaluator.RoundToTwoDecimals(System.Convert.ToDouble(value));
+        }
+        catch
+        {
+            return value;
+        }
+    }
 
     private void SerializeEquipmentData(EquipmentResult equipmentResult, ConcurrentDictionary<string, object?> forwardEquipmentResult, ConcurrentBag<ParameterConfig> virtualPoints, ConcurrentDictionary<string, string> dataEquipmentId)
     {
@@ -97,17 +117,22 @@ public class EquipmentDataProcessor : IEquipmentDataProcessor
                 continue;
 
             // 【故障传播核心】根据计算结果设置虚拟点状态
-            existingPoint.Value = calcResult.Value;
             existingPoint.ReadIsSuccess = calcResult.IsSuccess;
 
-            if (!calcResult.IsSuccess)
+            if (calcResult.IsSuccess)
             {
-                // 继承源点的错误信息
-                existingPoint.ErrorMsg = calcResult.ErrorMsg ?? "虚拟点计算失败";
+                // 对 Float/Double 类型应用两位小数精度控制（BOOL2INT 等整型结果 DataType 为 Int，不受影响）
+                var finalVirtualValue = ApplyPrecisionControl(vPoint.DataType, calcResult.Value);
+                existingPoint.Value = finalVirtualValue;
+                existingPoint.ErrorMsg = string.Empty;
+                // 同步更新序列化数据字典（VirtualPointCalculator 写入的是未经精度处理的原始值）
+                forwardEquipmentResult[vPoint.Label] = finalVirtualValue;
             }
             else
             {
-                existingPoint.ErrorMsg = string.Empty;
+                existingPoint.Value = calcResult.Value;
+                // 继承源点的错误信息
+                existingPoint.ErrorMsg = calcResult.ErrorMsg ?? "虚拟点计算失败";
             }
         }
 

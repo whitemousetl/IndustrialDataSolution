@@ -156,7 +156,9 @@ public class VirtualPointCalculator
             interpreter.SetVariable(varName, value);
         }
 
-        return interpreter.Eval(normalizedExpression);
+        var result = interpreter.Eval(normalizedExpression);
+        // 对浮点型计算结果应用两位小数精度（整型、布尔型等结果不受影响）
+        return RoundFloatingPointResult(result);
     }
 
     /// <summary>
@@ -174,6 +176,20 @@ public class VirtualPointCalculator
             "TRUE" or "是" or "YES" or "1" => 1,
             "FALSE" or "否" or "NO" or "0" => 0,
             _ => double.TryParse(str, out var d) ? (d != 0 ? 1 : 0) : 0
+        };
+    }
+
+    /// <summary>
+    /// 对浮点型计算结果应用两位小数精度，整型、布尔型等不受影响
+    /// </summary>
+    private static object? RoundFloatingPointResult(object? result)
+    {
+        return result switch
+        {
+            double d => SingleVariableExpressionEvaluator.RoundToTwoDecimals(d),
+            float f  => SingleVariableExpressionEvaluator.RoundToTwoDecimals(f),
+            decimal m => (double)Math.Round(m, 2, MidpointRounding.AwayFromZero),
+            _        => result  // int、bool、string 等原封不动
         };
     }
 }

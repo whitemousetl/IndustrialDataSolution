@@ -4,6 +4,7 @@ using IndustrialDataProcessor.Domain.Repositories;
 using IndustrialDataProcessor.Infrastructure.BackgroundServices;
 using IndustrialDataProcessor.Infrastructure.Communication.Connection;
 using IndustrialDataProcessor.Infrastructure.EquipmentCollectionDataProcessing;
+using IndustrialDataProcessor.Infrastructure.HeartbeatReporter;
 using IndustrialDataProcessor.Infrastructure.OpcUa;
 using IndustrialDataProcessor.Infrastructure.Persistence.Repositories;
 using IndustrialDataProcessor.Infrastructure.Serialization;
@@ -25,6 +26,9 @@ public static class DependencyInjection
     {
         // 0.绑定 OPC UA 配置选项
         services.Configure<OpcUaOptions>(configuration.GetSection(OpcUaOptions.SectionName));
+
+        // 0.1 绑定心跳上报配置选项
+        services.Configure<HeartbeatOptions>(configuration.GetSection(HeartbeatOptions.SectionName));
 
         // 1. 配置 SqlSugar 数据库客户端
         ConfigureSqlSugar(services, configuration);
@@ -52,6 +56,9 @@ public static class DependencyInjection
 
         // 9. 配置 JSON 序列化选项
         ConfigureJsonOptions(services);
+
+        // 10. 注册 HttpClient（心跳上报专用）
+        RegisterHttpClients(services, configuration);
 
         return services;
     }
@@ -122,6 +129,9 @@ public static class DependencyInjection
         services.AddSingleton<OpcUaHostingService>();
         services.AddSingleton<IDataPublishServerManager>(sp => sp.GetRequiredService<OpcUaHostingService>());
         services.AddHostedService(sp => sp.GetRequiredService<OpcUaHostingService>());
+
+        // 设备状态心跳上报服务
+        services.AddHostedService<HeartbeatReporterHostingService>();
     }
 
     /// <summary>
@@ -243,6 +253,20 @@ public static class DependencyInjection
     //        return options;
     //    });
     //}
+
+    /// <summary>
+    /// 注册 HttpClient
+    /// </summary>
+    private static void RegisterHttpClients(IServiceCollection services, IConfiguration configuration)
+    {
+        var heartbeatOptions = configuration.GetSection(HeartbeatOptions.SectionName).Get<HeartbeatOptions>()
+                               ?? new HeartbeatOptions();
+
+        services.AddHttpClient("HeartbeatReporter", client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(heartbeatOptions.TimeoutSeconds);
+        });
+    }
 
     /// <summary>
     /// 配置 DI 容器中的 JSON 序列化选项单例。

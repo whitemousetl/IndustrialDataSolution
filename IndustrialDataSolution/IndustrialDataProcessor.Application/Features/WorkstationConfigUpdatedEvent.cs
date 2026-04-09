@@ -41,7 +41,7 @@ public class WorkstationConfigUpdatedEventHandler(
 
         // 【性能优化】使用 Fire-and-Forget 模式，立即返回不阻塞调用方
         // 耗时操作（连接关闭、任务重启、OPC UA 服务器重启）在后台异步执行
-        _ = ExecuteBackgroundOperationsAsync(cancellationToken);
+        _ = ExecuteBackgroundOperationsAsync(CancellationToken.None);
 
         return Task.CompletedTask;
     }
